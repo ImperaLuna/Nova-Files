@@ -9,7 +9,7 @@ use std::sync::mpsc::{self, Receiver};
 
 use nova_files_api::{Connection, EntryKind, Fit, Unreadable};
 use nova_files_preview_api::{
-    Command, Event, PREVIEW_ENTRIES, PREVIEW_TEXT_BYTES, Preview, PreviewContent, PreviewId,
+    Command, Event, Mark, PREVIEW_ENTRIES, PREVIEW_TEXT_BYTES, Preview, PreviewContent, PreviewId,
 };
 
 use common::{ANSWER_TIMEOUT, Bench};
@@ -72,6 +72,25 @@ fn a_text_file_shows_its_text_and_size() {
             cut: false
         }
     );
+}
+
+#[test]
+fn a_source_file_shows_its_text_with_marks() {
+    let bench = Bench::new("preview-code");
+    let path = bench.at("main.rs");
+    let code = "fn main() {} // start\n";
+    fs::write(&path, code).unwrap();
+    let shown = preview(&client(&bench), 1, path).unwrap();
+    match &shown.content {
+        PreviewContent::Code { text, cut, runs } => {
+            assert_eq!(&**text, code);
+            assert!(!cut);
+            let covered: u32 = runs.iter().map(|run| run.bytes).sum();
+            assert_eq!(covered as usize, code.len());
+            assert!(runs.iter().any(|run| run.mark == Mark::Comment));
+        }
+        other => panic!("expected code, got {other:?}"),
+    }
 }
 
 #[test]

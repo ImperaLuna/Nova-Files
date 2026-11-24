@@ -13,6 +13,7 @@ use nova_files_shell::{PageRef, TabId};
 
 use crate::FolderWindows;
 use crate::assets::Icon;
+use crate::filtering::Filter;
 use crate::jump::TypeJump;
 use crate::places::START_LABEL;
 use crate::selection::Selection;
@@ -32,6 +33,7 @@ pub struct Tab {
     scroll: UniformListScrollHandle,
     search: Over,
     counted: SharedString,
+    filter: Filter,
     listed: Option<PageRef>,
     on_its_way: Option<Location>,
 }
@@ -279,6 +281,7 @@ impl MainWindow {
 
     fn leave_tab(&mut self, cx: &mut Context<Self>) -> Tab {
         self.forget_rows(cx);
+        let filter = self.drop_filter();
         self.went_elsewhere();
         self.close_menu(cx);
         self.path_bar.update(cx, |bar, cx| {
@@ -304,6 +307,7 @@ impl MainWindow {
             scroll: mem::replace(&mut self.scroll, UniformListScrollHandle::new()),
             search: mem::take(&mut self.search),
             counted: mem::take(&mut self.counted),
+            filter,
             listed: self.listed_page.take(),
             on_its_way,
         }
@@ -322,6 +326,7 @@ impl MainWindow {
         self.scroll = tab.scroll;
         self.search = tab.search;
         self.counted = tab.counted;
+        self.filter = tab.filter;
         self.listed_page = tab.listed;
         self.core_moved = true;
         if let Some(place) = tab.on_its_way {

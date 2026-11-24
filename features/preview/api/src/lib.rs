@@ -80,6 +80,14 @@ pub enum PreviewContent {
     /// The start of a text file, at most [`PREVIEW_TEXT_BYTES`]; `cut`
     /// when the file goes on past it.
     Text { text: Arc<str>, cut: bool },
+    /// The start of a source or config file, as [`PreviewContent::Text`],
+    /// with `runs` marking what each piece of it is, in order: their
+    /// lengths add up to `text`'s.
+    Code {
+        text: Arc<str>,
+        cut: bool,
+        runs: Arc<[Run]>,
+    },
     /// A folder's first entries, folders first and A to Z, at most
     /// [`PREVIEW_ENTRIES`], and how many it holds in all.
     Folder { first: Vec<Entry>, count: usize },
@@ -87,4 +95,26 @@ pub enum PreviewContent {
     /// that wouldn't decode, or a device, pipe or socket. The client shows
     /// its icon.
     Icon,
+}
+
+/// One piece of a [`PreviewContent::Code`] text: `bytes` long, all of one
+/// [`Mark`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Run {
+    pub bytes: u32,
+    pub mark: Mark,
+}
+
+/// What a piece of code is, for its colour.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Mark {
+    Plain,
+    Comment,
+    Keyword,
+    Quoted,
+    Number,
+    Function,
+    Type,
+    Tag,
+    Attribute,
 }

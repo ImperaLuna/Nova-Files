@@ -3,7 +3,9 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
-use nova_files_api::{Entry, EntryId, EntryKind, HiddenFiles, Unreadable};
+use nova_files_api::{Entry, EntryId, EntryKind, HiddenFiles, Unreadable, holds_every_word};
+
+use crate::folder::Inner;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Stopped {
@@ -55,6 +57,38 @@ pub fn keep_shown(entries: Vec<Entry>, hidden: HiddenFiles) -> Vec<Entry> {
                 .collect(),
         ),
     }
+}
+
+pub fn keep_named(entries: Vec<Entry>, filter: &str) -> Vec<Entry> {
+    let paired = entries.into_iter().map(|entry| (entry, ())).collect();
+    keep_named_paired(paired, filter)
+        .into_iter()
+        .map(|(entry, ())| entry)
+        .collect()
+}
+
+pub fn keep_named_known(listed: Inner, filter: &str) -> Inner {
+    let (entries, details) = listed?;
+    let paired = entries.into_iter().zip(details).collect();
+    Ok(keep_named_paired(paired, filter).into_iter().unzip())
+}
+
+fn keep_named_paired<T>(paired: Vec<(Entry, T)>, filter: &str) -> Vec<(Entry, T)> {
+    if filter.trim().is_empty() {
+        return paired;
+    }
+    paired
+        .into_iter()
+        .filter(|(entry, _)| holds_every_word(&entry.name.to_string_lossy(), filter))
+        .zip(0..)
+        .map(|((entry, carried), index)| {
+            let entry = Entry {
+                id: EntryId(index),
+                ..entry
+            };
+            (entry, carried)
+        })
+        .collect()
 }
 
 fn vanished(error: io::Error) -> Result<(), Stopped> {
@@ -118,6 +152,8 @@ pub fn unreadable(error: &io::Error) -> Unreadable {
 
 #[cfg(test)]
 mod tests {
+    use nova_files_api::Details;
+
     use super::*;
 
     fn sorted(items: &[(&str, EntryKind)]) -> Vec<String> {
@@ -130,6 +166,42 @@ mod tests {
             .into_iter()
             .map(|(name, _)| name.to_string_lossy().into_owned())
             .collect()
+    }
+
+    fn files(names: &[&str]) -> Vec<Entry> {
+        numbered(
+            names
+                .iter()
+                .map(|name| (OsString::from(name), EntryKind::File))
+                .collect(),
+        )
+    }
+
+    #[test]
+    fn a_filter_keeps_the_names_holding_its_words_and_renumbers_them() {
+        let kept = keep_named(files(&["Beach.jpg", "notes.txt", "beach.png"]), "BEACH");
+        assert_eq!(kept, files(&["Beach.jpg", "beach.png"]));
+        let all = files(&["a", "b"]);
+        assert_eq!(keep_named(all.clone(), " "), all);
+    }
+
+    #[test]
+    fn a_filter_keeps_each_entry_with_its_own_details() {
+        let details = |size| Details {
+            size: Some(size),
+            modified: None,
+        };
+        let listed = Ok((
+            files(&["one", "two", "three"]),
+            vec![details(1), details(2), details(3)],
+        ));
+        let (entries, kept) = keep_named_known(listed, "t").unwrap();
+        assert_eq!(entries, files(&["two", "three"]));
+        assert_eq!(kept, [details(2), details(3)]);
+        assert_eq!(
+            keep_named_known(Err(Unreadable::Failed), "t"),
+            Err(Unreadable::Failed)
+        );
     }
 
     #[test]

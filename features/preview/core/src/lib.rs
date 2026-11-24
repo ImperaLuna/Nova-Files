@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 
+mod code;
+
 use std::fs::{self, File, Metadata};
 use std::io::{self, Read as _};
 use std::os::unix::fs::OpenOptionsExt as _;
@@ -123,6 +125,20 @@ fn event(request: &Request) -> Option<Event> {
         }
     };
     let named = (!metadata.is_dir()).then(|| target(path));
+    let content = match (content, named.as_deref().and_then(Path::file_name)) {
+        (PreviewContent::Text { text, cut }, Some(name)) => {
+            match code::runs(name, &text, cancelled) {
+                Some(runs) => PreviewContent::Code {
+                    text,
+                    cut,
+                    runs: runs.into(),
+                },
+                None if cancelled() => return None,
+                None => PreviewContent::Text { text, cut },
+            }
+        }
+        (content, _) => content,
+    };
     let kind_name = named.as_deref().and_then(Path::file_name).and_then(|name| {
         let types = &request.types;
         types.of(name).and_then(|mime| types.name(mime))

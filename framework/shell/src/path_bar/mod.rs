@@ -161,6 +161,7 @@ impl PathBar {
             id: MENU_LISTING,
             path: folder.to_path_buf(),
             order: Order::default(),
+            filter: String::new(),
         })
         .ok()?;
         Some(line)

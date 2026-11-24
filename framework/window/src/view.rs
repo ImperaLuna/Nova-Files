@@ -1,5 +1,6 @@
 mod bar;
 mod drop;
+mod filter;
 mod full_name;
 mod gallery;
 mod icons;
@@ -22,15 +23,16 @@ use gpui::{
 };
 
 use crate::commands::{
-    self, ClearSelection, CursorDown, CursorFirst, CursorLast, CursorPageDown, CursorPageUp,
-    CursorUp, GoBack, GoForward, GoUp, OpenMenu, OpenSelected, PreviewNext, PreviewPrevious,
-    SelectAll, SelectDown, SelectFirst, SelectLast, SelectLeft, SelectPageDown, SelectPageUp,
-    SelectRight, SelectUp, ToggleSelected,
+    ClearSelection, CursorDown, CursorFirst, CursorLast, CursorPageDown, CursorPageUp, CursorUp,
+    GoBack, GoForward, GoUp, OpenMenu, OpenSelected, PreviewNext, PreviewPrevious, SelectAll,
+    SelectDown, SelectFirst, SelectLast, SelectLeft, SelectPageDown, SelectPageUp, SelectRight,
+    SelectUp, ToggleSelected,
 };
 use crate::commands::{
     CloseTab, NewTab, NewWindow, NextTab, PreviousTab, Reload, ReopenTab, RingDown, RingFirst,
     RingLast, RingLeft, RingRight, RingUp, TypePath,
 };
+use crate::filtering::{self, ClearFilter, EraseLetter};
 use crate::selection::{Move, Reach};
 use crate::theme::{self, Colors, size, text};
 use crate::window::MainWindow;
@@ -63,7 +65,7 @@ impl MainWindow {
         }
         self.focus_menu(window, cx);
         div()
-            .key_context(commands::KEY_CONTEXT)
+            .key_context(filtering::keys(self.filtering()))
             .on_modifiers_changed(|_, window, cx| {
                 if cx.has_active_drag() {
                     window.refresh();
@@ -78,6 +80,10 @@ impl MainWindow {
             .on_action(cx.listener(|this, _: &GoUp, _, _| this.go_up()))
             .on_action(cx.listener(|this, _: &TypePath, window, cx| this.type_path(window, cx)))
             .on_action(cx.listener(|this, _: &GoBack, _, cx| this.go_back(cx)))
+            .on_action(cx.listener(|this, _: &EraseLetter, _, cx| {
+                this.erase_filter_letter(cx);
+            }))
+            .on_action(cx.listener(|this, _: &ClearFilter, _, cx| this.clear_filter(cx)))
             .on_action(cx.listener(|this, _: &GoForward, _, cx| this.go_forward(cx)))
             .on_action(cx.listener(|this, _: &OpenMenu, _, cx| this.menu_key(cx)))
             .map(|root| Self::typed_keys(root, cx))

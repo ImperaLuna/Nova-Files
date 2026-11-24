@@ -55,6 +55,7 @@ fn icons_through_the_core(root: &Path) {
                 id: ListingId(id),
                 path: root.join("files"),
                 order: Order::default(),
+                filter: String::new(),
             })
             .unwrap();
         wait_for(

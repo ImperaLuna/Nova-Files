@@ -5,6 +5,8 @@ use image::{Frame, RgbaImage};
 use nova_files_api::{EntryId, Fit, ListingId, Picture};
 use nova_files_preview_api::{Preview, PreviewContent, PreviewId};
 
+use crate::code::Coded;
+
 // GPUI draws images in BGRA order.
 // https://github.com/ImperaLuna/zed/tree/47424cdc3f1a49829960e1ecbcdcdd967d034265/crates/gpui
 const RED: usize = 0;
@@ -50,6 +52,7 @@ pub struct Shown {
     pub entry: EntryId,
     pub preview: Option<Arc<Preview>>,
     pub picture: Option<Arc<RenderImage>>,
+    pub code: Option<Arc<Coded>>,
 }
 
 #[derive(Debug, Clone)]
@@ -124,6 +127,7 @@ mod tests {
             entry: EntryId(entry),
             preview: None,
             picture: None,
+            code: None,
         };
         let moved_entry = |entry, from, to| moved(shown(entry), EntryId(from), EntryId(to)).entry;
         assert_eq!(moved_entry(2, 2, 5), EntryId(5));

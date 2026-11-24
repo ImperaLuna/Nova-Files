@@ -228,6 +228,16 @@ impl MainWindow {
             return false;
         };
         let now = cx.background_executor().now();
+        if self.filters_here() && !typed.chars().any(char::is_control) {
+            let taken = self.filter_typed(typed);
+            if taken {
+                self.host()
+                    .entries
+                    .update(cx, |entries, _| entries.set_jumped(Some(now)));
+                cx.notify();
+            }
+            return taken;
+        }
         let blank = typed.chars().all(char::is_whitespace);
         if typed.chars().any(char::is_control) || (blank && !self.jump.continues(now)) {
             return false;
