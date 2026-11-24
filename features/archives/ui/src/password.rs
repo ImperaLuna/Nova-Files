@@ -5,7 +5,9 @@ use gpui::{
 use nova_files_api::{Answer, Carried, Command, Conflict, ConflictKind, JobId, Question, Scope};
 use nova_files_archives_api::{PASSWORD_TO_LOCK, PASSWORD_WRONG, Password};
 use nova_files_shell::island::asking;
-use nova_files_shell::island::look::{floating, label, password_box, worded};
+use nova_files_shell::island::look::{
+    PASSWORD_NEEDED as NEEDED, PASSWORD_WRONG as WRONG, floating, label, password_box, worded,
+};
 use nova_files_shell::island::words::name_of;
 use nova_files_shell::text::{TextField, TextFieldEvent};
 use nova_files_shell::theme::{Colors, text};
@@ -16,8 +18,6 @@ use crate::ArchivesPart;
 const UNLOCK: &str = "Unlock";
 const LOCK: &str = "Lock";
 const CANCEL: &str = "Cancel";
-const NEEDED: &str = ": needs a password";
-const WRONG: &str = ": wrong password";
 
 pub struct Asked {
     job: JobId,

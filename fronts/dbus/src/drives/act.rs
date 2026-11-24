@@ -20,7 +20,11 @@ const UNMOUNT: &str = "Unmount";
 const UNLOCK: &str = "Unlock";
 const LOCK: &str = "Lock";
 const EJECT: &str = "Eject";
-const NOT_UNLOCKED: &str = "/";
+const WRONG_PASSWORD: [&str; 3] = [
+    "Operation not permitted",
+    "ncorrect passphrase",
+    "No key available",
+];
 const POWER_OFF: &str = "PowerOff";
 
 const BUSY: [&str; 1] = ["org.freedesktop.UDisks2.Error.DeviceBusy"];
@@ -75,11 +79,15 @@ fn unlock(
     let path = object(&volume.0)?;
     let encrypted = proxy(connection, &path, ENCRYPTED)?;
     let open: OwnedObjectPath = encrypted.get_property(CLEARTEXT_DEVICE).map_err(failure)?;
-    let inside = if open.as_str() == NOT_UNLOCKED {
+    let inside = if open.as_str() == objects::NO_OBJECT {
         encrypted
             .call(UNLOCK, &(password.0.as_str(), Options::new()))
             .map_err(|error| match failure(error) {
-                DriveFailure::Failed(_) => DriveFailure::WrongPassword,
+                DriveFailure::Failed(text)
+                    if WRONG_PASSWORD.iter().any(|said| text.contains(said)) =>
+                {
+                    DriveFailure::WrongPassword
+                }
                 other => other,
             })?
     } else {

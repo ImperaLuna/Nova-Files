@@ -18,6 +18,7 @@ use nova_files_shell::{
 };
 
 pub use shown::{NEARLY_FULL, ShownDrive, free, here, shown};
+pub use unlock::Said;
 
 const ROW_PREFIX: &str = "drive-";
 const OPEN_LABEL: &str = "Open";

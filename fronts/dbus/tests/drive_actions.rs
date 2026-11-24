@@ -334,3 +334,16 @@ fn ejecting_a_stick_that_was_never_unlocked_only_switches_it_off() {
     assert_eq!(Udisks::new(bus.bus()).act(&eject(STICK)), Ok(None));
     assert_eq!(udisks.calls(), vec![format!("power off {STICK}")]);
 }
+
+#[test]
+fn an_unlock_that_fails_for_another_reason_says_it_in_the_service_s_words() {
+    let bus = PrivateBus::start();
+    let mut objects = locked_stick();
+    let said = "Error unlocking /dev/sdb1: Failed to load device context: Invalid argument";
+    objects[1].encrypted.as_mut().unwrap().unlock_fails = Some(Failure::Failed(said.to_owned()));
+    let _udisks = StandIn::start(&bus.address, &objects);
+    assert_eq!(
+        Udisks::new(bus.bus()).act(&unlock(LOCKED_VOLUME, LOCKED_PASSWORD)),
+        Err(DriveFailure::Failed(said.to_owned()))
+    );
+}

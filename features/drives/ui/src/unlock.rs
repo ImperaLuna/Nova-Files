@@ -4,22 +4,29 @@ use gpui::{
     Window, div,
 };
 use nova_files_drives_api::{DriveAction, DriveFailure, DriveList, Password, VolumeId};
-use nova_files_shell::island::look::{floating, label, password_box, worded};
+use nova_files_shell::island::look::{
+    PASSWORD_NEEDED, PASSWORD_WRONG, floating, label, password_box, worded,
+};
 use nova_files_shell::text::{TextField, TextFieldEvent};
 use nova_files_shell::theme::{Colors, text};
 use nova_files_shell::{Navigator, Scene};
 
-use crate::DrivesPart;
+use crate::{DrivesPart, UNLOCK_LABEL};
 
-const UNLOCK: &str = "Unlock";
 const CANCEL: &str = "Cancel";
-const NEEDED: &str = ": needs a password";
-const WRONG: &str = ": wrong password";
+const FAILED: &str = ": can't be unlocked";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Said {
+    Needed,
+    Wrong,
+    Failed,
+}
 
 pub struct Asked {
     volume: VolumeId,
     name: SharedString,
-    wrong: bool,
+    said: Said,
     field: Entity<TextField>,
     _events: Subscription,
 }
@@ -31,16 +38,16 @@ impl DrivesPart {
         name: SharedString,
         cx: &mut Context<Self>,
     ) {
-        if self
-            .asked
-            .as_ref()
-            .is_some_and(|asked| asked.volume == volume)
-        {
-            return;
-        }
-        let field = cx.new(|cx| TextField::new(cx).hiding());
+        let shown = self.asked.as_ref().filter(|asked| asked.volume == volume);
+        let field = shown.map_or_else(
+            || cx.new(|cx| TextField::new(cx).hiding()),
+            |asked| asked.field.clone(),
+        );
         let handle = field.read(cx).focus_handle(cx);
         self.host.nav.update(cx, |nav, cx| nav.focus(handle, cx));
+        if shown.is_some() {
+            return;
+        }
         let events = cx.subscribe(&field, |part, _, event, cx| match event {
             TextFieldEvent::Submitted => part.give_password(cx),
             TextFieldEvent::Cancelled => part.stop_asking(cx),
@@ -49,15 +56,15 @@ impl DrivesPart {
         self.asked = Some(Asked {
             volume,
             name,
-            wrong: false,
+            said: Said::Needed,
             field,
             _events: events,
         });
         cx.notify();
     }
 
-    pub fn says_wrong_password(&self) -> bool {
-        self.asked.as_ref().is_some_and(|asked| asked.wrong)
+    pub fn says(&self) -> Option<Said> {
+        self.asked.as_ref().map(|asked| asked.said)
     }
 
     fn give_password(&mut self, cx: &mut Context<Self>) {
@@ -92,12 +99,12 @@ impl DrivesPart {
         let Some(asked) = self.asked.as_mut().filter(|asked| asked.volume == *volume) else {
             return;
         };
-        if failure == Some(&DriveFailure::WrongPassword) {
-            asked.wrong = true;
-            cx.notify();
-        } else {
-            self.stop_asking(cx);
+        match failure {
+            None | Some(DriveFailure::Gone | DriveFailure::Cancelled) => self.stop_asking(cx),
+            Some(DriveFailure::WrongPassword) => asked.said = Said::Wrong,
+            Some(_) => asked.said = Said::Failed,
         }
+        cx.notify();
     }
 
     pub(crate) fn stop_asking_unless_locked(&mut self, list: &DriveList, cx: &mut Context<Self>) {
@@ -136,13 +143,13 @@ pub fn island(
                     .font_weight(text::STRONG_WEIGHT)
                     .child(asked.name.clone()),
             )
-            .child(reason(asked.wrong))
+            .child(reason(asked.said))
             .into_any_element(),
         password_box(asked.field.clone(), &colors).into_any_element(),
         worded("island-cancel", CANCEL, &colors)
             .on_click(cx.listener(|part, _: &ClickEvent, _, cx| part.stop_asking(cx)))
             .into_any_element(),
-        worded("island-unlock", UNLOCK, &colors)
+        worded("island-unlock", UNLOCK_LABEL, &colors)
             .text_color(colors.accept)
             .on_click(cx.listener(|part, _: &ClickEvent, _, cx| part.give_password(cx)))
             .into_any_element(),
@@ -150,6 +157,10 @@ pub fn island(
     Some(floating(parts, None, &colors).into_any_element())
 }
 
-const fn reason(wrong: bool) -> &'static str {
-    if wrong { WRONG } else { NEEDED }
+const fn reason(said: Said) -> &'static str {
+    match said {
+        Said::Needed => PASSWORD_NEEDED,
+        Said::Wrong => PASSWORD_WRONG,
+        Said::Failed => FAILED,
+    }
 }

@@ -129,6 +129,9 @@ pub fn worded(
         .child(words.into())
 }
 
+pub const PASSWORD_NEEDED: &str = ": needs a password";
+pub const PASSWORD_WRONG: &str = ": wrong password";
+
 pub fn password_box(field: Entity<TextField>, colors: &Colors) -> Div {
     div()
         .debug_selector(|| "island-password".to_owned())

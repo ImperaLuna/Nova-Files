@@ -23,7 +23,7 @@ const FILESYSTEM_USAGE: &str = "filesystem";
 const ENCRYPTED_USAGE: &str = "crypto";
 const BACKING_DEVICE: &str = "CryptoBackingDevice";
 const DRIVE_OF: &str = "Drive";
-const NO_OBJECT: &str = "/";
+pub const NO_OBJECT: &str = "/";
 const USER_MOUNT_FOLDERS: [&str; 3] = ["/media", "/run/media", "/mnt"];
 
 pub fn drive_list(objects: &ManagedObjects) -> DriveList {
@@ -56,7 +56,7 @@ fn volume(
         ENCRYPTED_USAGE if is_locked(interface(interfaces, ENCRYPTED)?) => None,
         _ => return None,
     };
-    if flag(block, "HintSystem") && mount_points.as_deref().is_some_and(is_system_mount) {
+    if is_system(objects, block) && mount_points.as_deref().is_some_and(is_system_mount) {
         return None;
     }
     Some(Volume {
@@ -77,10 +77,16 @@ fn is_locked(encrypted: &Properties) -> bool {
 }
 
 fn drive_of(objects: &ManagedObjects, block: &Properties) -> Option<String> {
-    object(block, DRIVE_OF).or_else(|| {
-        let backing = OwnedObjectPath::try_from(object(block, BACKING_DEVICE)?).ok()?;
-        object(interface(objects.get(&backing)?, BLOCK)?, DRIVE_OF)
-    })
+    object(block, DRIVE_OF).or_else(|| object(backing(objects, block)?, DRIVE_OF))
+}
+
+fn is_system(objects: &ManagedObjects, block: &Properties) -> bool {
+    flag(backing(objects, block).unwrap_or(block), "HintSystem")
+}
+
+fn backing<'a>(objects: &'a ManagedObjects, block: &Properties) -> Option<&'a Properties> {
+    let path = OwnedObjectPath::try_from(object(block, BACKING_DEVICE)?).ok()?;
+    interface(objects.get(&path)?, BLOCK)
 }
 
 fn drive(
@@ -152,7 +158,7 @@ pub fn eject_plan(
         if interface(interfaces, ENCRYPTED).is_some_and(|encrypted| !is_locked(encrypted)) {
             plan.unlocked.push(path.clone());
         }
-        let system = flag(block, "HintSystem");
+        let system = is_system(objects, block);
         plan.power_off &= !system;
         let points = interface(interfaces, FILESYSTEM)
             .map(mount_points)

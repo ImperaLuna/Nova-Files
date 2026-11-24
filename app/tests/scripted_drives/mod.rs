@@ -6,7 +6,7 @@ use nova_files_drives_api::{
     Event as DrivesEvent, Password, Volume, VolumeId,
 };
 
-use nova_files_drives_ui::DrivesPart;
+use nova_files_drives_ui::{DrivesPart, Said};
 
 use super::*;
 
@@ -185,7 +185,10 @@ fn a_wrong_password_keeps_the_prompt_for_another_try(cx: &mut TestAppContext) {
     });
     cx.run_until_parked();
     assert!(cx.debug_bounds("island-password").is_some());
-    assert!(drives_part(&view, cx).read_with(cx, |part, _| part.says_wrong_password()));
+    assert_eq!(
+        drives_part(&view, cx).read_with(cx, |part, _| part.says()),
+        Some(Said::Wrong)
+    );
     assert_eq!(core.next_listing(), None);
 
     drive_actions(&mut core);
@@ -208,13 +211,22 @@ fn escape_or_an_unplugged_drive_takes_the_prompt_away(cx: &mut TestAppContext) {
 }
 
 #[gpui::test]
-fn a_failure_other_than_a_wrong_password_closes_the_prompt(cx: &mut TestAppContext) {
-    let (_view, cx, core) = asking_for_the_vault(cx);
+fn a_failure_other_than_a_wrong_password_says_it_can_t_be_unlocked(cx: &mut TestAppContext) {
+    let (view, cx, core) = asking_for_the_vault(cx);
     cx.simulate_input("hunter2");
     cx.simulate_keystrokes("enter");
     core.send(DrivesEvent::DriveDone {
         action: unlock("hunter2"),
         result: Err(DriveFailure::NotAuthorized),
+    });
+    cx.run_until_parked();
+    assert_eq!(
+        drives_part(&view, cx).read_with(cx, |part, _| part.says()),
+        Some(Said::Failed)
+    );
+    core.send(DrivesEvent::DriveDone {
+        action: unlock("hunter2"),
+        result: Err(DriveFailure::Gone),
     });
     cx.run_until_parked();
     assert!(cx.debug_bounds("island-password").is_none());

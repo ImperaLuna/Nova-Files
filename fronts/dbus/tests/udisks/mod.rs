@@ -113,6 +113,7 @@ impl Block {
 pub struct Encrypted {
     pub path: String,
     pub password: String,
+    pub unlock_fails: Option<Failure>,
     pub cleartext_device: String,
     pub inside: Box<Object>,
     pub calls: Calls,
@@ -137,6 +138,9 @@ impl Encrypted {
             .lock()
             .unwrap()
             .push(format!("unlock {}", self.path));
+        if let Some(failure) = &self.unlock_fails {
+            return Err(failure.clone());
+        }
         if passphrase != self.password {
             return Err(Failure::Failed(format!(
                 "Error unlocking {}: Failed to activate device: Operation not permitted",
@@ -516,7 +520,6 @@ pub fn stick() -> Vec<Object> {
 pub fn locked_stick() -> Vec<Object> {
     let inside = Object {
         block: Some(Block {
-            hint_system: false,
             crypto_backing_device: LOCKED_VOLUME.to_owned(),
             ..with_filesystem(block("/dev/dm-0", 30_735_859_712), "ext4", "Vault")
         }),
@@ -535,6 +538,7 @@ pub fn locked_stick() -> Vec<Object> {
         encrypted: Some(Encrypted {
             path: String::new(),
             password: LOCKED_PASSWORD.to_owned(),
+            unlock_fails: None,
             cleartext_device: NONE.to_owned(),
             inside: Box::new(inside),
             calls: Calls::default(),
