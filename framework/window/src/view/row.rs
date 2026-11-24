@@ -1,5 +1,5 @@
 pub use nova_files_shell::kind::entry_kind;
-pub use nova_files_shell::widgets::{icon, icon_slot, kind_icon};
+pub use nova_files_shell::widgets::{detail, icon, icon_slot, kind_icon};
 use std::ops::Range;
 use std::sync::Arc;
 
@@ -13,7 +13,7 @@ use nova_files_api::{Entry, EntryId, EntryKind, IconKind, Listing, ListingId};
 use nova_files_shell::Allow;
 
 use super::full_name::full_name_on_hover;
-use crate::theme::{Colors, radius, size, space, text};
+use crate::theme::{Colors, radius, size, space};
 use crate::window::{Aim, DraggedRow, MainWindow};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -34,15 +34,22 @@ impl Corners {
 
 #[derive(Debug, Clone, Copy)]
 pub struct ColumnWidths {
+    pub part: Pixels,
     pub folder: Pixels,
     pub kind: Pixels,
     pub modified: Pixels,
     pub size: Pixels,
 }
 
+#[derive(Default)]
+pub struct Middle {
+    pub part: Option<AnyElement>,
+    pub folder: Option<AnyElement>,
+}
+
 pub fn cells(
     name: impl IntoElement,
-    folder: Option<AnyElement>,
+    middle: Middle,
     (kind, modified): (impl IntoElement, impl IntoElement),
     (size_cell, widths): (impl IntoElement, ColumnWidths),
     modified_selector: String,
@@ -65,7 +72,12 @@ pub fn cells(
         .gap(size::COLUMN_GAP)
         .h_full()
         .child(div().flex_1().min_w_0().h_full().child(name))
-        .children(folder.map(|folder| column(widths.folder).child(folder)))
+        .children(middle.part.map(|part| column(widths.part).child(part)))
+        .children(
+            middle
+                .folder
+                .map(|folder| column(widths.folder).child(folder)),
+        )
         .child(column(widths.kind).child(kind))
         .child(
             column(widths.modified)
@@ -73,15 +85,6 @@ pub fn cells(
                 .child(modified),
         )
         .child(column(widths.size).justify_end().child(size_cell))
-}
-
-pub fn detail(text_content: String, colors: &Colors) -> impl IntoElement {
-    div()
-        .text_size(text::DETAIL)
-        .font_weight(text::DETAIL_WEIGHT)
-        .text_color(colors.text_dim)
-        .truncate()
-        .child(text_content)
 }
 
 pub fn share_cell(text_content: String, share: Option<f32>, colors: &Colors) -> impl IntoElement {
