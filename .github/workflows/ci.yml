@@ -83,7 +83,7 @@ jobs:
           # Only main saves: a pull request's cache is visible to that pull
           # request alone, and the repository holds 10 GB in all.
           save: ${{ github.ref == 'refs/heads/main' }}
-          gc-max-store-size-linux: 8G
+          gc-max-store-size-linux: 10G
           purge: true
           purge-prefixes: nix-check-${{ runner.os }}-
           purge-created: 0
