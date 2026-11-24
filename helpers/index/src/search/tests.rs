@@ -2,6 +2,7 @@ use nova_files_test_folder::TestFolder;
 
 use super::*;
 use crate::build::Built;
+use crate::fold;
 use crate::{Details, FileId, Flags, Kind};
 
 const FILES: u32 = 100_000;

@@ -190,3 +190,42 @@ fn a_loose_name_match_inside_a_folder_the_word_also_matches_is_still_found() {
     assert!(!stages[0].contains(&frame));
     assert!(stages[1].contains(&frame));
 }
+
+fn moved(home: &Home, from: &str, to: &str) -> Overlay {
+    let mut overlay = Overlay::new();
+    overlay.apply(&Change::Moved {
+        from: home.folder.path().join(from),
+        to: home.folder.path().join(to),
+    });
+    overlay
+}
+
+#[test]
+fn files_in_a_renamed_folder_match_its_new_name_and_not_the_old_one() {
+    let home = Home::new();
+    let overlay = moved(&home, "projects/editor", "projects/studio");
+    assert_eq!(
+        home.stages("studio/main", &overlay)[0],
+        paths(&["projects/studio/src/main.rs"])
+    );
+    assert_eq!(
+        home.stages("studio frame", &overlay)[0],
+        paths(&["projects/studio/src/components/render_frame.rs"])
+    );
+    assert_eq!(home.stages("editor/main", &overlay)[0], paths(&[]));
+    assert_eq!(
+        home.stages("viewer/render", &overlay)[0],
+        paths(&["projects/viewer/src/render_pass.rs"])
+    );
+}
+
+#[test]
+fn files_in_a_folder_moved_elsewhere_match_the_folders_now_above_them() {
+    let home = Home::new();
+    let overlay = moved(&home, "projects/viewer", "Documents/viewer");
+    assert_eq!(
+        home.stages("documents pass", &overlay)[0],
+        paths(&["Documents/viewer/src/render_pass.rs"])
+    );
+    assert_eq!(home.stages("projects pass", &overlay)[0], paths(&[]));
+}

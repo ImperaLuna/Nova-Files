@@ -1,13 +1,12 @@
 mod matching;
+mod placed;
 mod scan;
 mod terms;
 
 use std::collections::HashSet;
-use std::ffi::OsStr;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
 
-use crate::fold;
 use crate::overlay::Overlay;
 use crate::reader::Index;
 
@@ -37,6 +36,7 @@ pub struct Search<'a> {
     stop: Option<&'a (dyn Fn() -> bool + Sync)>,
     typed_rows: Option<Vec<u32>>,
     loose_rows: Option<Vec<u32>>,
+    moved: Vec<Range<u32>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -65,6 +65,19 @@ impl Index {
 
     pub fn search_now<'a>(&'a self, query: &str, limit: usize, overlay: &'a Overlay) -> Search<'a> {
         self.searching(query, limit, Some(overlay))
+    }
+
+    fn moved_rows(&self, overlay: &Overlay) -> Vec<Range<u32>> {
+        let mut moved: Vec<Range<u32>> = overlay
+            .moved_from()
+            .filter_map(|from| {
+                let row = self.row_of(from)?;
+                Some(row.0..self.end(row)?.0)
+            })
+            .collect();
+        moved.sort_unstable_by_key(|rows| (rows.start, std::cmp::Reverse(rows.end)));
+        moved.dedup_by(|inner, outer| inner.end <= outer.end);
+        moved
     }
 
     fn searching<'a>(
@@ -97,6 +110,7 @@ impl Index {
             stop: None,
             typed_rows: None,
             loose_rows: None,
+            moved: overlay.map_or_else(Vec::new, |overlay| self.moved_rows(overlay)),
         }
     }
 }
@@ -185,6 +199,8 @@ impl<'a> Search<'a> {
             hidden_last: self.hidden_last,
             keep: (!changed).then_some(self.limit),
             stop: self.stop,
+            overlay: self.overlay,
+            moved: &self.moved,
         };
         let kept = self.kept.filter(|kept| kept.within == self.within);
         let pool = kept.and_then(|kept| {
@@ -210,7 +226,6 @@ impl<'a> Search<'a> {
     fn scan_added(&self, loose: bool) -> Vec<Rank> {
         let root = self.index.root();
         let mut ranked = Vec::new();
-        let mut folded = Vec::new();
         for (at, &path) in self.added.iter().enumerate() {
             if self
                 .within
@@ -219,38 +234,17 @@ impl<'a> Search<'a> {
             {
                 continue;
             }
-            let Some(name) = path.file_name().map(OsStr::as_encoded_bytes) else {
+            let Some(placed) = placed::meet(&self.terms, root, path, loose) else {
                 continue;
             };
-            let mut reach = vec![0; self.terms.len()];
-            let above = path
-                .parent()
-                .and_then(|folder| folder.strip_prefix(root).ok());
-            let depth = above.map_or(0, |folders| {
-                folders
-                    .iter()
-                    .inspect(|folder| {
-                        fold::fold_into(folder.as_encoded_bytes(), &mut folded);
-                        self.terms.enter(&mut reach, &folded);
-                    })
-                    .count()
-            });
-            fold::fold_into(name, &mut folded);
-            let starts_word = |at| fold::starts_word(name, &folded, at);
-            let Some(met) = self.terms.meet(&reach, &folded, loose, starts_word) else {
-                continue;
-            };
-            if loose && !met.loosely {
-                continue;
-            }
             let hidden = is_hidden(root, path);
             ranked.push((
-                met.by_folders,
-                met.found.kind,
+                placed.met.by_folders,
+                placed.met.found.kind,
                 hidden && self.hidden_last,
-                met.found.cost,
-                folded.len(),
-                depth,
+                placed.met.found.cost,
+                placed.length,
+                placed.depth,
                 Source::Added(at),
             ));
         }

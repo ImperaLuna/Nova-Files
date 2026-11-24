@@ -4,7 +4,9 @@ use std::panic::resume_unwind;
 use std::thread;
 
 use super::matching::MatchKind;
+use super::placed;
 use super::terms::Terms;
+use crate::overlay::Overlay;
 use crate::reader::Index;
 use crate::{Kind, RowId};
 
@@ -30,6 +32,8 @@ pub struct Scan<'a> {
     pub hidden_last: bool,
     pub keep: Option<usize>,
     pub stop: Option<&'a (dyn Fn() -> bool + Sync)>,
+    pub overlay: Option<&'a Overlay>,
+    pub moved: &'a [Range<u32>],
 }
 
 #[derive(Default)]
@@ -168,7 +172,34 @@ impl Scan<'_> {
         scanned
     }
 
+    fn is_moved(&self, RowId(row): RowId) -> bool {
+        let before = self.moved.partition_point(|rows| rows.start <= row);
+        before
+            .checked_sub(1)
+            .and_then(|last| self.moved.get(last))
+            .is_some_and(|rows| row < rows.end)
+    }
+
+    fn rank_placed(&self, row: RowId) -> Option<Rank> {
+        let index = self.index;
+        let path = self.overlay?.place(index.path(row)?)?;
+        let placed = placed::meet(self.terms, index.root(), &path, self.loose)?;
+        let hidden = self.all_hidden || index.is_hidden(row);
+        Some((
+            placed.met.by_folders,
+            placed.met.found.kind,
+            hidden && self.hidden_last,
+            placed.met.found.cost,
+            placed.length,
+            placed.depth,
+            Source::Row(row),
+        ))
+    }
+
     fn rank(&self, row: RowId, open: &Open) -> Option<Rank> {
+        if self.is_moved(row) {
+            return self.rank_placed(row);
+        }
         let index = self.index;
         let reach = open.reach();
         if !self

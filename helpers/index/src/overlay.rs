@@ -105,6 +105,13 @@ impl Overlay {
         (!self.gone.holds(&path)).then_some(path)
     }
 
+    pub fn moved_from(&self) -> impl Iterator<Item = &Path> {
+        self.steps.iter().filter_map(|step| match step {
+            Step::Moved { from, .. } => Some(from.as_path()),
+            Step::Gone(_) => None,
+        })
+    }
+
     pub fn added(&self) -> impl Iterator<Item = &Path> {
         self.added.iter().map(PathBuf::as_path)
     }
