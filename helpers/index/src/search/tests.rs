@@ -62,7 +62,7 @@ fn shortest_needles() -> Vec<PathBuf> {
 #[test]
 fn a_scan_split_over_threads_keeps_the_best_hits_in_order() {
     let (_folder, index) = haystack("search-threads");
-    assert!(FILES as usize >= 2 * ROWS_PER_THREAD_MIN);
+    assert!(FILES as usize >= 2 * scan::ROWS_PER_THREAD_MIN);
     let mut stages = index.search("needle", LIMIT);
     let typed: Vec<PathBuf> = stages
         .next()

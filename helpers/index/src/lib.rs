@@ -16,7 +16,7 @@ pub use crawl::{CrawlError, crawl};
 pub use mounts::local_mount_points;
 pub use overlay::Overlay;
 pub use reader::{Index, OpenError};
-pub use search::{Hit, MatchKind, STAGES, Search};
+pub use search::{Hit, Kept, MatchKind, STAGES, Search};
 pub use watch::Watcher;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]

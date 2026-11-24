@@ -10,7 +10,9 @@ use std::thread;
 
 use nova_files_api::{EventSink, ListingId};
 use nova_files_entries_core::ListingJob;
-use nova_files_index::{Change, ChangeLog, Index, LogReader, MatchKind, Overlay, STAGES, Watcher};
+use nova_files_index::{
+    Change, ChangeLog, Index, Kept, LogReader, MatchKind, Overlay, STAGES, Watcher,
+};
 use nova_files_search_api::{Event, Hit, MAX_FOUND, MAX_HITS, Matched, SearchFailed, SearchId};
 
 pub use complete::complete;
@@ -67,6 +69,7 @@ struct Live {
     changes: usize,
     lost: bool,
     watching: Watching,
+    last: Option<(usize, Kept)>,
 }
 
 struct Early {
@@ -182,7 +185,7 @@ impl Searcher {
     fn run(
         &self,
         query: &Query<'_>,
-        wanted: impl Fn() -> bool,
+        wanted: impl Fn() -> bool + Sync,
         mut answer: impl FnMut(Vec<Hit>, bool) -> bool,
     ) -> bool {
         let shared = &self.shared;
@@ -215,6 +218,11 @@ impl Searcher {
             answer(Vec::new(), true);
             return true;
         }
+        let replaced = || !wanted();
+        search = search.stopping(&replaced);
+        if let Some((_, kept)) = live.last.as_ref().filter(|(read, _)| *read == live.changes) {
+            search = search.from(kept);
+        }
         let catching_up = matches!(live.watching, Watching::CatchingUp);
         let mut shown = HashSet::new();
         let mut early = None;
@@ -240,6 +248,9 @@ impl Searcher {
             if !answer(hits.into_iter().map(told).collect(), search.is_done()) {
                 break;
             }
+        }
+        if let Some(kept) = search.keep() {
+            live.last = Some((live.changes, kept));
         }
         drop(state);
         let last = early.and_then(|early| self.caught_up(query, early, &wanted));
@@ -381,6 +392,7 @@ impl Live {
             changes: 0,
             lost: false,
             watching: Watching::CatchingUp,
+            last: None,
         };
         Some((live, log))
     }

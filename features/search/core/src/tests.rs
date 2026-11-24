@@ -78,6 +78,19 @@ impl Searcher {
         );
     }
 
+    fn found(&self, text: &str) -> Vec<PathBuf> {
+        let mut found = Vec::new();
+        assert!(self.run(
+            &Query::everywhere(text, LIMIT as usize),
+            || true,
+            |hits, _| {
+                found.extend(hits.into_iter().map(|hit| hit.path));
+                true
+            }
+        ));
+        found
+    }
+
     fn live(&self, edit: impl FnOnce(&mut Live)) {
         edit(self.state().live.as_mut().unwrap());
     }
@@ -196,6 +209,34 @@ fn a_watcher_that_cannot_start_leaves_no_index_and_fails_it() {
     searcher.shared.watch(&index, None);
     assert!(searcher.state().failed);
     assert!(searcher.state().live.is_none());
+}
+
+#[test]
+fn typing_on_searches_from_the_last_matches_and_finds_the_same() {
+    let scratch = Scratch::new("typing-on");
+    let searcher = scratch.searcher();
+    searcher.search_and_settle();
+    let report = scratch.root.join("home/docs/report.pdf");
+    searcher.live(|live| live.last = None);
+    for typed in ["rep", "repo", "report", "reportx", "report"] {
+        let fresh = scratch.searcher();
+        fresh.search_and_settle();
+        fresh.live(|live| live.last = None);
+        assert_eq!(searcher.found(typed), fresh.found(typed), "{typed}");
+        searcher.live(|live| assert!(live.last.is_some()));
+    }
+    assert_eq!(searcher.found("report"), [report]);
+}
+
+#[test]
+fn a_file_removed_between_two_searches_is_not_found_by_the_longer_one() {
+    let scratch = Scratch::new("removed-between");
+    let searcher = scratch.searcher();
+    searcher.search_and_settle();
+    let report = scratch.root.join("home/docs/report.pdf");
+    assert_eq!(searcher.found("rep"), std::slice::from_ref(&report));
+    searcher.live(|live| live.take(&[Change::Removed { path: report }]));
+    assert_eq!(searcher.found("repo"), paths(&[]));
 }
 
 #[test]
