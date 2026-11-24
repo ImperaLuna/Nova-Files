@@ -3385,6 +3385,8 @@ dependencies = [
  "nova-files-gathered-api",
  "nova-files-gathered-core",
  "nova-files-gathered-ui",
+ "nova-files-git-api",
+ "nova-files-git-core",
  "nova-files-jobs",
  "nova-files-look-api",
  "nova-files-look-core",
@@ -3656,7 +3658,22 @@ dependencies = [
  "gpui",
  "nova-files-api",
  "nova-files-gathered-api",
+ "nova-files-git-api",
  "nova-files-shell",
+]
+
+[[package]]
+name = "nova-files-git-api"
+version = "0.1.0"
+
+[[package]]
+name = "nova-files-git-core"
+version = "0.1.0"
+dependencies = [
+ "log",
+ "nova-files-api",
+ "nova-files-git-api",
+ "nova-files-test-folder",
 ]
 
 [[package]]

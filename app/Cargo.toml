@@ -32,6 +32,8 @@
 # - nova-files-gathered-api
 # - nova-files-gathered-core
 # - nova-files-gathered-ui
+# - nova-files-git-api
+# - nova-files-git-core
 # - nova-files-index
 # - nova-files-jobs
 # - nova-files-look-api
@@ -118,6 +120,8 @@ nova-files-folders-ui.workspace = true
 nova-files-gathered-api.workspace = true
 nova-files-gathered-core.workspace = true
 nova-files-gathered-ui.workspace = true
+nova-files-git-api.workspace = true
+nova-files-git-core.workspace = true
 nova-files-jobs.workspace = true
 nova-files-look-api.workspace = true
 nova-files-look-core.workspace = true
