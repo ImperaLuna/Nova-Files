@@ -125,23 +125,23 @@ impl Index {
         })
     }
 
-    pub fn release_details(&self) {
+    pub fn release_details(&self) -> io::Result<()> {
         let (at, len) = (self.layout.details, self.layout.len - self.layout.details);
         #[expect(unsafe_code, reason = "dropping pages of the map needs madvise")]
         // SAFETY: the map is a read-only view of the index file, so the
         // kernel reads a dropped page from the file again on its next use:
         // https://man7.org/linux/man-pages/man2/madvise.2.html (MADV_DONTNEED)
-        let released = unsafe {
+        unsafe {
             self.map
                 .unchecked_advise_range(UncheckedAdvice::DontNeed, at, len)
-        };
-        released.ok();
+        }
     }
 
     fn folded_span(&self, RowId(row): RowId) -> Option<(usize, usize)> {
-        let start = self.word(self.layout.folded_at, row)?;
-        let end = self.word(self.layout.folded_at, row.checked_add(1)?)?;
-        Some((usize::try_from(start).ok()?, usize::try_from(end).ok()?))
+        if row >= self.rows() {
+            return None;
+        }
+        Some((self.folded_at(row)?, self.folded_at(row.checked_add(1)?)?))
     }
 
     fn traits(&self, RowId(row): RowId) -> Option<u8> {
@@ -153,9 +153,20 @@ impl Index {
     }
 
     fn word(&self, column: usize, row: u32) -> Option<u32> {
+        if row >= self.rows() {
+            return None;
+        }
+        self.word_at(column, row)
+    }
+
+    fn folded_at(&self, row: u32) -> Option<usize> {
         if row > self.rows() {
             return None;
         }
+        usize::try_from(self.word_at(self.layout.folded_at, row)?).ok()
+    }
+
+    fn word_at(&self, column: usize, row: u32) -> Option<u32> {
         format::u32_at(
             &self.map,
             column + usize::try_from(row).ok()? * size_of::<u32>(),
