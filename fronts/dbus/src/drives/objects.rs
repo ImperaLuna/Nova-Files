@@ -15,16 +15,21 @@ pub const BLOCK: &str = "org.freedesktop.UDisks2.Block";
 pub const FILESYSTEM: &str = "org.freedesktop.UDisks2.Filesystem";
 pub const PARTITION: &str = "org.freedesktop.UDisks2.Partition";
 pub const DRIVE: &str = "org.freedesktop.UDisks2.Drive";
+pub const ENCRYPTED: &str = "org.freedesktop.UDisks2.Encrypted";
+pub const CLEARTEXT_DEVICE: &str = "CleartextDevice";
 pub const MOUNT_POINTS: &str = "MountPoints";
 
 const FILESYSTEM_USAGE: &str = "filesystem";
+const ENCRYPTED_USAGE: &str = "crypto";
+const BACKING_DEVICE: &str = "CryptoBackingDevice";
+const DRIVE_OF: &str = "Drive";
 const NO_OBJECT: &str = "/";
 const USER_MOUNT_FOLDERS: [&str; 3] = ["/media", "/run/media", "/mnt"];
 
 pub fn drive_list(objects: &ManagedObjects) -> DriveList {
     let mut volumes: Vec<Volume> = objects
         .iter()
-        .filter_map(|(path, interfaces)| volume(path, interfaces))
+        .filter_map(|(path, interfaces)| volume(objects, path, interfaces))
         .collect();
     volumes.sort_by(|a, b| a.id.cmp(&b.id));
     let used: BTreeSet<&DriveId> = volumes.iter().filter_map(|v| v.drive.as_ref()).collect();
@@ -37,25 +42,44 @@ pub fn drive_list(objects: &ManagedObjects) -> DriveList {
     DriveList { drives, volumes }
 }
 
-fn volume(path: &OwnedObjectPath, interfaces: &Interfaces) -> Option<Volume> {
+fn volume(
+    objects: &ManagedObjects,
+    path: &OwnedObjectPath,
+    interfaces: &Interfaces,
+) -> Option<Volume> {
     let block = interface(interfaces, BLOCK)?;
-    let filesystem = interface(interfaces, FILESYSTEM)?;
-    if text(block, "IdUsage") != FILESYSTEM_USAGE || flag(block, "HintIgnore") {
+    if flag(block, "HintIgnore") {
         return None;
     }
-    let mount_points = mount_points(filesystem);
-    if flag(block, "HintSystem") && is_system_mount(&mount_points) {
+    let mount_points = match text(block, "IdUsage").as_str() {
+        FILESYSTEM_USAGE => Some(mount_points(interface(interfaces, FILESYSTEM)?)),
+        ENCRYPTED_USAGE if is_locked(interface(interfaces, ENCRYPTED)?) => None,
+        _ => return None,
+    };
+    if flag(block, "HintSystem") && mount_points.as_deref().is_some_and(is_system_mount) {
         return None;
     }
     Some(Volume {
         id: VolumeId(path.as_str().to_owned()),
-        drive: object(block, "Drive").map(DriveId),
+        drive: drive_of(objects, block).map(DriveId),
         label: label(block, interface(interfaces, PARTITION)),
         size: number(block, "Size"),
         filesystem: text(block, "IdType"),
-        mount_point: mount_points.into_iter().next(),
+        locked: mount_points.is_none(),
+        mount_point: mount_points.into_iter().flatten().next(),
         device: OsString::from_vec(byte_string(block, "PreferredDevice")),
         read_only: flag(block, "ReadOnly"),
+    })
+}
+
+fn is_locked(encrypted: &Properties) -> bool {
+    object(encrypted, CLEARTEXT_DEVICE).is_none()
+}
+
+fn drive_of(objects: &ManagedObjects, block: &Properties) -> Option<String> {
+    object(block, DRIVE_OF).or_else(|| {
+        let backing = OwnedObjectPath::try_from(object(block, BACKING_DEVICE)?).ok()?;
+        object(interface(objects.get(&backing)?, BLOCK)?, DRIVE_OF)
     })
 }
 
@@ -98,6 +122,7 @@ fn paths(sent: Vec<Vec<u8>>) -> Vec<PathBuf> {
 #[derive(Debug, PartialEq, Eq)]
 pub struct EjectPlan {
     pub mounted: Vec<OwnedObjectPath>,
+    pub unlocked: Vec<OwnedObjectPath>,
     pub eject: bool,
     pub power_off: bool,
 }
@@ -112,6 +137,7 @@ pub fn eject_plan(
         .ok_or(DriveFailure::Gone)?;
     let mut plan = EjectPlan {
         mounted: Vec::new(),
+        unlocked: Vec::new(),
         eject: flag(properties, "Ejectable"),
         power_off: flag(properties, "CanPowerOff"),
     };
@@ -120,8 +146,11 @@ pub fn eject_plan(
         let Some(block) = interface(interfaces, BLOCK) else {
             continue;
         };
-        if object(block, "Drive").as_deref() != Some(drive.as_str()) {
+        if drive_of(objects, block).as_deref() != Some(drive.as_str()) {
             continue;
+        }
+        if interface(interfaces, ENCRYPTED).is_some_and(|encrypted| !is_locked(encrypted)) {
+            plan.unlocked.push(path.clone());
         }
         let system = flag(block, "HintSystem");
         plan.power_off &= !system;
@@ -143,6 +172,7 @@ pub fn eject_plan(
             .then_with(|| a.as_str().cmp(b.as_str()))
     });
     plan.mounted = mounted.into_iter().map(|(_, path)| path).collect();
+    plan.unlocked.sort_by(|a, b| a.as_str().cmp(b.as_str()));
     Ok(plan)
 }
 

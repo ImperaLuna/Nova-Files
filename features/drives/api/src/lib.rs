@@ -12,8 +12,8 @@ use std::sync::Arc;
 
 pub use disk_space::{DiskSpace, MAX_DISK_SPACE_PATHS, PathSpace};
 pub use drive::{
-    Drive, DriveAction, DriveFailure, DriveId, DriveList, DriveOffer, DriveService, Volume,
-    VolumeId,
+    Drive, DriveAction, DriveFailure, DriveId, DriveList, DriveOffer, DriveService, Password,
+    Volume, VolumeId,
 };
 
 /// A request from a client about drives.
@@ -23,7 +23,7 @@ pub enum Command {
     /// and from then on the client gets [`Event::Drives`] again each time
     /// one comes, goes or changes. Clients that never ask never get them.
     Drives,
-    /// Mount, unmount or eject. The answer, once it is done, is
+    /// Mount, unmount, unlock or eject. The answer, once it is done, is
     /// [`Event::DriveDone`]; the change itself reaches every client that
     /// asked for the drives as [`Event::Drives`].
     Drive(DriveAction),
@@ -40,7 +40,7 @@ pub enum Event {
     /// again to each client that asked whenever one comes, goes or
     /// changes.
     Drives(Arc<DriveList>),
-    /// [`Command::Drive`] `action` is done: for a mount, with where the
+    /// [`Command::Drive`] `action` is done: for a mount or an unlock, with where the
     /// volume is now. Only the client that asked hears it.
     DriveDone {
         action: DriveAction,

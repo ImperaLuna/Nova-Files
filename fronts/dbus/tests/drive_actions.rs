@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 use nova_files_dbus::{Bus, Udisks};
 use nova_files_drives_api::{
-    Command, DriveAction, DriveFailure, DriveId, DriveService as _, Event, VolumeId,
+    Command, DriveAction, DriveFailure, DriveId, DriveService as _, Event, Password, VolumeId,
 };
 
 mod support;
@@ -18,8 +18,9 @@ const STICK_INNER: &str = "/org/freedesktop/UDisks2/block_devices/sdb2";
 
 use support::{PrivateBus, WAIT};
 use udisks::{
-    EXT4_LOOP, FAT_LOOP, Failure, NVME, NVME_WINDOWS, STICK, STICK_VOLUME, StandIn, core_client,
-    failing, laptop_disk, mounted_at, recorded, stick,
+    EXT4_LOOP, FAT_LOOP, Failure, LOCKED_INSIDE, LOCKED_PASSWORD, LOCKED_VOLUME, NVME,
+    NVME_WINDOWS, STICK, STICK_VOLUME, StandIn, core_client, failing, laptop_disk, locked_stick,
+    mounted_at, recorded, stick,
 };
 
 fn mount(volume: &str) -> DriveAction {
@@ -32,6 +33,10 @@ fn unmount(volume: &str) -> DriveAction {
 
 fn eject(drive: &str) -> DriveAction {
     DriveAction::Eject(DriveId(drive.to_owned()))
+}
+
+fn unlock(volume: &str, password: &str) -> DriveAction {
+    DriveAction::Unlock(VolumeId(volume.to_owned()), Password(password.to_owned()))
 }
 
 fn busy() -> Failure {
@@ -241,4 +246,91 @@ fn a_client_of_the_core_hears_how_its_action_went() {
             result: Ok(None),
         }
     );
+}
+
+#[test]
+fn the_right_password_unlocks_a_volume_and_mounts_what_is_inside() {
+    let bus = PrivateBus::start();
+    let udisks = StandIn::start(&bus.address, &locked_stick());
+    assert_eq!(
+        Udisks::new(bus.bus()).act(&unlock(LOCKED_VOLUME, LOCKED_PASSWORD)),
+        Ok(Some(PathBuf::from("/run/media/me/dm_2d0")))
+    );
+    assert_eq!(
+        udisks.calls(),
+        vec![
+            format!("unlock {LOCKED_VOLUME}"),
+            format!("mount {LOCKED_INSIDE}")
+        ]
+    );
+}
+
+#[test]
+fn a_wrong_password_says_so_and_leaves_the_volume_locked() {
+    let bus = PrivateBus::start();
+    let udisks = StandIn::start(&bus.address, &locked_stick());
+    let service = Udisks::new(bus.bus());
+    assert_eq!(
+        service.act(&unlock(LOCKED_VOLUME, "letmein")),
+        Err(DriveFailure::WrongPassword)
+    );
+    assert_eq!(udisks.calls(), vec![format!("unlock {LOCKED_VOLUME}")]);
+    assert_eq!(
+        service.act(&unlock(LOCKED_VOLUME, LOCKED_PASSWORD)),
+        Ok(Some(PathBuf::from("/run/media/me/dm_2d0")))
+    );
+}
+
+#[test]
+fn a_volume_something_else_unlocked_is_only_mounted() {
+    let bus = PrivateBus::start();
+    let udisks = StandIn::start(&bus.address, &locked_stick());
+    let service = Udisks::new(bus.bus());
+    service
+        .act(&unlock(LOCKED_VOLUME, LOCKED_PASSWORD))
+        .unwrap();
+    service.act(&unmount(LOCKED_INSIDE)).unwrap();
+    assert_eq!(
+        service.act(&unlock(LOCKED_VOLUME, "anything")),
+        Ok(Some(PathBuf::from("/run/media/me/dm_2d0")))
+    );
+    assert_eq!(udisks.calls()[3..], [format!("mount {LOCKED_INSIDE}")]);
+}
+
+#[test]
+fn unlocking_a_volume_that_is_not_encrypted_fails() {
+    let bus = PrivateBus::start();
+    let udisks = StandIn::start(&bus.address, &stick());
+    assert!(matches!(
+        Udisks::new(bus.bus()).act(&unlock(STICK_VOLUME, LOCKED_PASSWORD)),
+        Err(DriveFailure::Gone | DriveFailure::Failed(_))
+    ));
+    assert!(udisks.calls().is_empty());
+}
+
+#[test]
+fn ejecting_an_unlocked_stick_unmounts_locks_then_switches_it_off() {
+    let bus = PrivateBus::start();
+    let udisks = StandIn::start(&bus.address, &locked_stick());
+    let service = Udisks::new(bus.bus());
+    service
+        .act(&unlock(LOCKED_VOLUME, LOCKED_PASSWORD))
+        .unwrap();
+    assert_eq!(service.act(&eject(STICK)), Ok(None));
+    assert_eq!(
+        udisks.calls()[2..],
+        [
+            format!("unmount {LOCKED_INSIDE}"),
+            format!("lock {LOCKED_VOLUME}"),
+            format!("power off {STICK}"),
+        ]
+    );
+}
+
+#[test]
+fn ejecting_a_stick_that_was_never_unlocked_only_switches_it_off() {
+    let bus = PrivateBus::start();
+    let udisks = StandIn::start(&bus.address, &locked_stick());
+    assert_eq!(Udisks::new(bus.bus()).act(&eject(STICK)), Ok(None));
+    assert_eq!(udisks.calls(), vec![format!("power off {STICK}")]);
 }

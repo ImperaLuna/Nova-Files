@@ -13,7 +13,8 @@ use std::time::Duration;
 
 use nova_files_dbus::Udisks;
 use nova_files_drives_api::{
-    Command, Drive, DriveId, DriveList, DriveService as _, Event, Volume, VolumeId,
+    Command, Drive, DriveAction, DriveId, DriveList, DriveService as _, Event, Password, Volume,
+    VolumeId,
 };
 
 mod support;
@@ -21,8 +22,9 @@ mod udisks;
 
 use support::{PrivateBus, WAIT};
 use udisks::{
-    EXT4_LOOP, FAT_LOOP, GPT_PHOTOS, GPT_UNNAMED, NVME, NVME_WINDOWS, STICK, STICK_VOLUME, StandIn,
-    core_client, laptop_disk, recorded, stick,
+    EXT4_LOOP, FAT_LOOP, GPT_PHOTOS, GPT_UNNAMED, LOCKED_INSIDE, LOCKED_PASSWORD, LOCKED_VOLUME,
+    NVME, NVME_WINDOWS, STICK, STICK_VOLUME, StandIn, core_client, laptop_disk, locked_stick,
+    recorded, stick,
 };
 
 const QUIET: Duration = Duration::from_millis(300);
@@ -84,6 +86,7 @@ fn loop_disks_list_their_filesystems_and_nothing_else() {
             mount_point: Some(PathBuf::from("/media/root/Backup")),
             device: OsString::from("/dev/loop1"),
             read_only: false,
+            locked: false,
         }
     );
     let fat = volume(&list, FAT_LOOP);
@@ -305,4 +308,32 @@ fn a_client_of_the_core_gets_the_drives() {
         Event::Drives(list) => assert_eq!(ids(&list), vec![STICK_VOLUME]),
         other => panic!("not drives: {other:?}"),
     }
+}
+
+#[test]
+fn a_locked_stick_shows_locked_and_what_is_inside_takes_its_place_once_unlocked() {
+    let bus = PrivateBus::start();
+    let _udisks = StandIn::start(&bus.address, &locked_stick());
+    let seen = follow(&bus);
+    let list = next(&seen);
+    assert_eq!(ids(&list), vec![LOCKED_VOLUME]);
+    let locked = volume(&list, LOCKED_VOLUME);
+    assert!(locked.locked);
+    assert_eq!(locked.drive, Some(DriveId(STICK.to_owned())));
+    assert_eq!(locked.mount_point, None);
+    assert_eq!(list.drives.len(), 1);
+
+    let unlock = DriveAction::Unlock(
+        VolumeId(LOCKED_VOLUME.to_owned()),
+        Password(LOCKED_PASSWORD.to_owned()),
+    );
+    Udisks::new(bus.bus()).act(&unlock).unwrap();
+    let list = until(&seen, |list| {
+        ids(list) == [LOCKED_INSIDE] && list.volumes[0].mount_point.is_some()
+    });
+    let inside = volume(&list, LOCKED_INSIDE);
+    assert!(!inside.locked);
+    assert_eq!(inside.label, "Vault");
+    assert_eq!(inside.drive, Some(DriveId(STICK.to_owned())));
+    assert_eq!(list.drives.len(), 1, "the stick can still be ejected");
 }

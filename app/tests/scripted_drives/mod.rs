@@ -2,8 +2,8 @@ use std::ffi::OsString;
 
 use gpui::{Modifiers, MouseButton, MouseDownEvent, MouseUpEvent};
 use nova_files_drives_api::{
-    Command as DrivesCommand, DiskSpace, Drive, DriveAction, DriveId, DriveList,
-    Event as DrivesEvent, Volume, VolumeId,
+    Command as DrivesCommand, DiskSpace, Drive, DriveAction, DriveFailure, DriveId, DriveList,
+    Event as DrivesEvent, Password, Volume, VolumeId,
 };
 
 use nova_files_drives_ui::DrivesPart;
@@ -22,6 +22,7 @@ fn volume(id: &str, mount_point: Option<&str>) -> Volume {
         mount_point: mount_point.map(PathBuf::from),
         device: OsString::from(format!("/dev/{id}")),
         read_only: false,
+        locked: false,
     }
 }
 
@@ -116,6 +117,107 @@ fn a_volume_clicked_is_mounted_then_opened(cx: &mut TestAppContext) {
         core.next_listing().map(|(_, path)| path),
         Some(PathBuf::from(STICK))
     );
+}
+
+const VAULT: &str = "/media/vault";
+
+fn locked(id: &str) -> Volume {
+    Volume {
+        locked: true,
+        filesystem: "crypto_LUKS".to_owned(),
+        ..volume(id, None)
+    }
+}
+
+fn unlock(password: &str) -> DriveAction {
+    DriveAction::Unlock(VolumeId("vault".to_owned()), Password(password.to_owned()))
+}
+
+fn asking_for_the_vault(
+    cx: &mut TestAppContext,
+) -> (Entity<MainWindow>, &mut VisualTestContext, Core) {
+    cx.update(nova_files_window::bind_text_keys);
+    let (view, cx, mut core) = with_drives(cx, vec![locked("vault")]);
+    let part = drives_part(&view, cx);
+    let vault = part.read_with(cx, |part, _| part.shown()[1].clone());
+    assert!(vault.locked);
+    part.update(cx, |part, cx| part.open_drive(vault, cx));
+    cx.run_until_parked();
+    assert_eq!(drive_actions(&mut core), []);
+    assert!(cx.debug_bounds("island-password").is_some());
+    (view, cx, core)
+}
+
+#[gpui::test]
+fn a_locked_drive_asks_for_its_password_then_opens(cx: &mut TestAppContext) {
+    let (_view, cx, mut core) = asking_for_the_vault(cx);
+    cx.simulate_keystrokes("enter");
+    assert_eq!(
+        drive_actions(&mut core),
+        [],
+        "an empty password is not sent"
+    );
+
+    cx.simulate_input("hunter2");
+    cx.simulate_keystrokes("enter");
+    assert_eq!(drive_actions(&mut core), [unlock("hunter2")]);
+
+    core.send(DrivesEvent::DriveDone {
+        action: unlock("hunter2"),
+        result: Ok(Some(PathBuf::from(VAULT))),
+    });
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("island-password").is_none());
+    assert_eq!(
+        core.next_listing().map(|(_, path)| path),
+        Some(PathBuf::from(VAULT))
+    );
+}
+
+#[gpui::test]
+fn a_wrong_password_keeps_the_prompt_for_another_try(cx: &mut TestAppContext) {
+    let (view, cx, mut core) = asking_for_the_vault(cx);
+    cx.simulate_input("letmein");
+    cx.simulate_keystrokes("enter");
+    core.send(DrivesEvent::DriveDone {
+        action: unlock("letmein"),
+        result: Err(DriveFailure::WrongPassword),
+    });
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("island-password").is_some());
+    assert!(drives_part(&view, cx).read_with(cx, |part, _| part.says_wrong_password()));
+    assert_eq!(core.next_listing(), None);
+
+    drive_actions(&mut core);
+    cx.simulate_input("hunter2");
+    cx.simulate_keystrokes("enter");
+    assert_eq!(drive_actions(&mut core), [unlock("hunter2")]);
+}
+
+#[gpui::test]
+fn escape_or_an_unplugged_drive_takes_the_prompt_away(cx: &mut TestAppContext) {
+    let (_view, cx, mut core) = asking_for_the_vault(cx);
+    cx.simulate_keystrokes("escape");
+    assert!(cx.debug_bounds("island-password").is_none());
+    assert_eq!(drive_actions(&mut core), []);
+
+    let (_view, cx, core) = asking_for_the_vault(cx);
+    core.send(drives(Vec::new()));
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("island-password").is_none());
+}
+
+#[gpui::test]
+fn a_failure_other_than_a_wrong_password_closes_the_prompt(cx: &mut TestAppContext) {
+    let (_view, cx, core) = asking_for_the_vault(cx);
+    cx.simulate_input("hunter2");
+    cx.simulate_keystrokes("enter");
+    core.send(DrivesEvent::DriveDone {
+        action: unlock("hunter2"),
+        result: Err(DriveFailure::NotAuthorized),
+    });
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("island-password").is_none());
 }
 
 fn in_the_stick(cx: &mut TestAppContext) -> (Entity<MainWindow>, &mut VisualTestContext, Core) {

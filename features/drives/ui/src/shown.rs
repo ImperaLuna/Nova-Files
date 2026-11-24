@@ -15,6 +15,7 @@ pub struct ShownDrive {
     pub folder: Option<PathBuf>,
     pub volume: Option<VolumeId>,
     pub eject: Option<DriveId>,
+    pub locked: bool,
 }
 
 pub fn shown(list: &DriveList) -> Vec<ShownDrive> {
@@ -23,6 +24,7 @@ pub fn shown(list: &DriveList) -> Vec<ShownDrive> {
         folder: Some(PathBuf::from(SYSTEM_FOLDER)),
         volume: None,
         eject: None,
+        locked: false,
     };
     let volumes = list
         .volumes
@@ -51,6 +53,7 @@ pub fn shown(list: &DriveList) -> Vec<ShownDrive> {
                 eject: drive
                     .filter(|drive| drive.removable && drive.ejectable)
                     .map(|drive| drive.id.clone()),
+                locked: volume.locked,
             }
         });
     std::iter::once(system).chain(volumes).collect()
@@ -94,6 +97,7 @@ mod tests {
             mount_point: mounted.map(PathBuf::from),
             device: "/dev/sdb1".into(),
             read_only: false,
+            locked: false,
         }
     }
 
@@ -134,6 +138,17 @@ mod tests {
         assert_eq!(rows[0].folder.as_deref(), Some(Path::new("/")));
         assert_eq!(rows[0].volume, None);
         assert_eq!(rows[2].folder, None);
+    }
+
+    #[test]
+    fn a_locked_volume_shows_locked_under_its_drive_s_name() {
+        let mut list = list();
+        list.volumes[1].locked = true;
+        let rows = shown(&list);
+        assert_eq!(rows[2].name.as_ref(), "Kingston");
+        assert!(rows[2].locked);
+        assert!(rows[2].eject.is_some());
+        assert_eq!(rows.iter().filter(|row| row.locked).count(), 1);
     }
 
     #[test]

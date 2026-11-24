@@ -1,15 +1,14 @@
 use gpui::{
-    AnyElement, AppContext as _, ClickEvent, Context, Div, Entity, Focusable as _,
-    InteractiveElement as _, IntoElement as _, ParentElement as _, StatefulInteractiveElement as _,
-    Styled as _, Subscription, Window, div,
+    AnyElement, AppContext as _, ClickEvent, Context, Entity, Focusable as _, IntoElement as _,
+    ParentElement as _, StatefulInteractiveElement as _, Styled as _, Subscription, Window, div,
 };
 use nova_files_api::{Answer, Carried, Command, Conflict, ConflictKind, JobId, Question, Scope};
 use nova_files_archives_api::{PASSWORD_TO_LOCK, PASSWORD_WRONG, Password};
 use nova_files_shell::island::asking;
-use nova_files_shell::island::look::{floating, label, worded};
+use nova_files_shell::island::look::{floating, label, password_box, worded};
 use nova_files_shell::island::words::name_of;
 use nova_files_shell::text::{TextField, TextFieldEvent};
-use nova_files_shell::theme::{Colors, radius, size, text};
+use nova_files_shell::theme::{Colors, text};
 use nova_files_shell::{Asking, Scene};
 
 use crate::ArchivesPart;
@@ -165,23 +164,6 @@ fn accept(question: &'static Question) -> &'static str {
     } else {
         UNLOCK
     }
-}
-
-fn password_box(field: Entity<TextField>, colors: &Colors) -> Div {
-    div()
-        .debug_selector(|| "island-password".to_owned())
-        .flex()
-        .flex_none()
-        .items_center()
-        .w(size::PASSWORD_WIDTH)
-        .h(size::RENAME_HEIGHT)
-        .px(size::RENAME_PAD)
-        .rounded(radius::SMALL)
-        .bg(colors.window)
-        .border(size::RING)
-        .border_color(colors.accept)
-        .text_color(colors.text)
-        .child(field)
 }
 
 #[cfg(test)]

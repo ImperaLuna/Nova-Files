@@ -41,6 +41,7 @@ pub enum Icon {
     Close,
     Chevron,
     Eject,
+    Lock,
     Open,
     Check,
     Eye,
@@ -58,7 +59,7 @@ pub enum Icon {
 }
 
 impl Icon {
-    const ALL: [Self; 49] = [
+    const ALL: [Self; 50] = [
         Self::Folder,
         Self::File,
         Self::FileText,
@@ -94,6 +95,7 @@ impl Icon {
         Self::Close,
         Self::Chevron,
         Self::Eject,
+        Self::Lock,
         Self::Open,
         Self::Check,
         Self::Eye,
@@ -147,6 +149,7 @@ impl Icon {
             Self::Close => "icons/close.svg",
             Self::Chevron => "icons/chevron.svg",
             Self::Eject => "icons/eject.svg",
+            Self::Lock => "icons/lock.svg",
             Self::Open => "icons/open.svg",
             Self::Check => "icons/check.svg",
             Self::Eye => "icons/eye.svg",
@@ -201,6 +204,7 @@ impl Icon {
             Self::Close => svg::CLOSE,
             Self::Chevron => svg::CHEVRON,
             Self::Eject => svg::EJECT,
+            Self::Lock => svg::LOCK,
             Self::Open => svg::OPEN,
             Self::Check => svg::CHECK,
             Self::Eye => svg::EYE,
