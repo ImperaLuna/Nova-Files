@@ -6,7 +6,7 @@ use gpui::{
     StyleRefinement, Styled, Window, transparent_black,
 };
 
-use crate::dropping::Sources;
+use crate::dropping::{Sources, shell_place};
 use crate::theme::{Colors, size};
 use crate::window::{Aim, DraggedRow, DraggedTab, HoverOpens, MainWindow};
 
@@ -29,6 +29,19 @@ impl MainWindow {
             .border_color(transparent_black())
             .drag_over::<DraggedRow>(move |style, _, _, _| lit(style))
             .drag_over::<ExternalPaths>(move |style, _, _, _| lit(style))
+    }
+
+    pub(super) fn folder_target<E: InteractiveElement + Styled>(
+        &self,
+        target: E,
+        aim: Aim,
+        cx: &Context<Self>,
+    ) -> E {
+        let target = match shell_place(&aim.at) {
+            Some(place) => Self::opens_on_hover(target, HoverOpens::Place(place), cx),
+            None => target,
+        };
+        self.drop_target(target, aim, cx)
     }
 
     pub(super) fn opens_on_hover<E: InteractiveElement>(
