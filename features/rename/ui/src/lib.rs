@@ -18,10 +18,10 @@ mod name;
 mod words;
 
 use name::{free_name, renamed};
-use nova_files_rename_api::{NewFolderJob, RenameJob, new_folder, rename};
-use words::{NewFolderWords, RenameWords};
+use nova_files_rename_api::{NewFileJob, NewFolderJob, RenameJob, new_file, new_folder, rename};
+use words::{NewFileWords, NewFolderWords, RenameWords};
 
-pub use nova_files_shell::actions::{NewFolder, RenameSelected};
+pub use nova_files_shell::actions::{NewFile, NewFolder, RenameSelected};
 
 command_spec!(
     RENAME,
@@ -39,6 +39,20 @@ command_spec!(
     ["ctrl-shift-n"],
     needs[Change]
 );
+command_spec!(
+    NEW_FILE,
+    NewFile,
+    "file.new-file",
+    "New file",
+    ["ctrl-alt-n"],
+    needs[Change]
+);
+
+type MakeJob = fn(PathBuf, OsString) -> Operation;
+type MadePath = fn(&Operation) -> Option<PathBuf>;
+
+const NEW_FOLDER_NAME: &str = "New folder";
+const NEW_FILE_NAME: &str = "New file";
 
 pub struct RenamePart {
     host: Host,
@@ -188,6 +202,20 @@ impl RenamePart {
     }
 
     fn new_folder(&mut self, _: &NewFolder, window: &mut Window, cx: &mut Context<Self>) {
+        self.make(NEW_FOLDER_NAME, (new_folder, made_folder), window, cx);
+    }
+
+    fn new_file(&mut self, _: &NewFile, window: &mut Window, cx: &mut Context<Self>) {
+        self.make(NEW_FILE_NAME, (new_file, made_file), window, cx);
+    }
+
+    fn make(
+        &mut self,
+        base: &str,
+        (job, makes): (MakeJob, MadePath),
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) {
         let scene = self.host.scene(cx);
         let Some(inside) = self.folder(&scene) else {
             return;
@@ -195,11 +223,11 @@ impl RenamePart {
         let Some(listing) = self.listing.as_ref().filter(|shown| shown.path == inside) else {
             return;
         };
-        let name = free_name(listing);
+        let name = free_name(listing, base);
         self.made
-            .wait(&self.host, (inside.join(&name), made_folder), window, cx);
+            .wait(&self.host, (inside.join(&name), makes), window, cx);
         self.host.island.update(cx, |island, cx| {
-            island.start_job(new_folder(inside, name), cx);
+            island.start_job(job(inside, name), cx);
         });
     }
 
@@ -247,7 +275,10 @@ fn new_folder_item(part: &RenamePart, scene: &Scene, _: &App) -> Vec<MenuItem> {
     if part.folder(scene).is_none() {
         return Vec::new();
     }
-    vec![MenuItem::run(Icon::NewFolder, &NEW_FOLDER)]
+    vec![
+        MenuItem::run(Icon::NewFolder, &NEW_FOLDER),
+        MenuItem::run(Icon::NewFile, &NEW_FILE),
+    ]
 }
 
 fn island_button(part: &RenamePart, _: &Scene, cx: &App) -> Vec<MenuItem> {
@@ -273,6 +304,8 @@ impl Part for RenamePart {
 
     fn slots(slots: &mut Slots<Self>) {
         slots.command(&NEW_FOLDER, anywhere, Self::new_folder);
+        slots.command(&NEW_FILE, anywhere, Self::new_file);
+        slots.job_words::<NewFileJob>(NewFileWords);
         slots.job_words::<RenameJob>(RenameWords);
         slots.job_words::<NewFolderJob>(NewFolderWords);
         slots.command(&RENAME, anywhere, Self::rename_selected);
@@ -295,6 +328,12 @@ impl Part for RenamePart {
         slots.rows_drawn(Self::rows_drawn);
         slots.watch(Self::watch);
     }
+}
+
+fn made_file(operation: &Operation) -> Option<PathBuf> {
+    operation
+        .get::<NewFileJob>()
+        .map(|job| job.inside.join(&job.name))
 }
 
 fn made_folder(operation: &Operation) -> Option<PathBuf> {

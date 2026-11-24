@@ -190,7 +190,7 @@ impl<F: Fn(WindowRequest) + Send + Sync + 'static> Searches<F> {
                 match ask_core(&self.connector, command).await? {
                     open_api::Event::Opened { .. } => Ok(()),
                     open_api::Event::NotOpened { .. } => open_file(bus, file, token).await,
-                    open_api::Event::OpenWith(_) => {
+                    open_api::Event::OpenWith(_) | open_api::Event::TerminalNotOpened { .. } => {
                         Err(failed("the core gave an unexpected answer"))
                     }
                 }

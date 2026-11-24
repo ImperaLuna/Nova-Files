@@ -10,6 +10,8 @@ const COMMENT: char = '#';
 const KEY_END: char = '=';
 const APPLICATION: &str = "Application";
 const TRUE: &str = "true";
+const LIST_SEPARATOR: char = ';';
+const TERMINAL_EMULATOR: &str = "TerminalEmulator";
 const MAX_ENTRY_BYTES: u64 = 262_144;
 const EXECUTABLE: u32 = 0o111;
 
@@ -20,6 +22,8 @@ pub struct Entry {
     pub icon: Option<String>,
     pub working_dir: Option<PathBuf>,
     pub terminal: bool,
+    pub emulates_terminal: bool,
+    pub listed: bool,
 }
 
 pub fn read(path: &Path, search_path: Option<&OsStr>) -> Option<Entry> {
@@ -42,7 +46,8 @@ fn parse(text: &str) -> Option<Parsed> {
     let mut in_group = false;
     let (mut kind, mut exec, mut name, mut icon, mut working_dir, mut try_exec) =
         (None, None, None, None, None, None);
-    let (mut hidden, mut terminal) = (false, false);
+    let (mut hidden, mut terminal, mut emulates_terminal, mut unlisted) =
+        (false, false, false, false);
     for line in text.lines().map(str::trim) {
         if line.starts_with(GROUP_START) {
             in_group = line == GROUP;
@@ -64,6 +69,12 @@ fn parse(text: &str) -> Option<Parsed> {
             "TryExec" => try_exec = Some(value),
             "Hidden" => hidden = value == TRUE,
             "Terminal" => terminal = value == TRUE,
+            "NoDisplay" => unlisted = value == TRUE,
+            "Categories" => {
+                emulates_terminal = value
+                    .split(LIST_SEPARATOR)
+                    .any(|category| category == TERMINAL_EMULATOR);
+            }
             _ => {}
         }
     }
@@ -77,6 +88,8 @@ fn parse(text: &str) -> Option<Parsed> {
             icon: icon.filter(|icon| !icon.is_empty()),
             working_dir: working_dir.filter(|dir| dir.is_absolute()),
             terminal,
+            emulates_terminal,
+            listed: !unlisted,
         },
         try_exec: try_exec.filter(|program| !program.is_empty()),
     })
@@ -102,7 +115,7 @@ fn unescape(value: &str) -> String {
     text
 }
 
-fn installed(program: &str, search_path: Option<&OsStr>) -> bool {
+pub fn installed(program: &str, search_path: Option<&OsStr>) -> bool {
     let program = Path::new(program);
     if program.is_absolute() {
         return executable(program);
@@ -134,6 +147,8 @@ mod tests {
             icon: None,
             working_dir: None,
             terminal: false,
+            emulates_terminal: false,
+            listed: true,
         }
     }
 
@@ -163,6 +178,8 @@ Name=New
                     icon: Some("viewer".to_owned()),
                     working_dir: Some(PathBuf::from("/opt/viewer")),
                     terminal: false,
+                    emulates_terminal: false,
+                    listed: true,
                 },
                 try_exec: None,
             })
@@ -192,6 +209,19 @@ Name=New
             ..entry("a %f")
         };
         assert_eq!(parse(in_terminal).map(|p| p.entry), Some(terminal));
+        let emulator =
+            "[Desktop Entry]\nType=Application\nExec=term\nCategories=System;TerminalEmulator;\n";
+        let emulates = Entry {
+            emulates_terminal: true,
+            ..entry("term")
+        };
+        assert_eq!(parse(emulator).map(|p| p.entry), Some(emulates));
+        let helper = "[Desktop Entry]\nType=Application\nExec=a\nNoDisplay=true\n";
+        let unlisted = Entry {
+            listed: false,
+            ..entry("a")
+        };
+        assert_eq!(parse(helper).map(|p| p.entry), Some(unlisted));
     }
 
     #[test]

@@ -3,8 +3,6 @@ use std::os::unix::ffi::{OsStrExt as _, OsStringExt as _};
 
 use nova_files_api::Listing;
 
-const NEW_FOLDER: &str = "New folder";
-
 pub fn renamed(original: &OsStr, typed: &str) -> OsString {
     let mut shown: Vec<(char, &[u8])> = Vec::new();
     for chunk in original.as_bytes().utf8_chunks() {
@@ -43,7 +41,7 @@ pub fn renamed(original: &OsStr, typed: &str) -> OsString {
     OsString::from_vec(bytes)
 }
 
-pub fn free_name(listing: &Listing) -> OsString {
+pub fn free_name(listing: &Listing, base: &str) -> OsString {
     let taken = |name: &str| {
         listing
             .entries
@@ -53,9 +51,9 @@ pub fn free_name(listing: &Listing) -> OsString {
     (1..=listing.entries.len() + 1)
         .map(|number| {
             if number == 1 {
-                NEW_FOLDER.to_owned()
+                base.to_owned()
             } else {
-                format!("{NEW_FOLDER} {number}")
+                format!("{base} {number}")
             }
         })
         .find(|name| !taken(name))
@@ -109,11 +107,13 @@ mod tests {
 
     #[test]
     fn a_new_folder_takes_the_first_free_name() {
-        assert_eq!(free_name(&listing(&[])), "New folder");
-        assert_eq!(free_name(&listing(&["New folder"])), "New folder 2");
+        let free = |names: &[&str]| free_name(&listing(names), "New folder");
+        assert_eq!(free(&[]), "New folder");
+        assert_eq!(free(&["New folder"]), "New folder 2");
         assert_eq!(
-            free_name(&listing(&["New folder", "New folder 2", "New folder 4"])),
+            free(&["New folder", "New folder 2", "New folder 4"]),
             "New folder 3"
         );
+        assert_eq!(free_name(&listing(&["New folder"]), "New file"), "New file");
     }
 }

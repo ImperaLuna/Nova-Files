@@ -247,6 +247,23 @@ fn undoing_a_rename_and_a_new_folder() {
 }
 
 #[test]
+fn undoing_a_new_file_sends_it_to_the_trash_with_what_was_written() {
+    let bench = Bench::new("undo-new-file");
+    let client = bench.client();
+    let made = undoable(
+        &client,
+        nova_files_rename_api::new_file(bench.root.clone(), "notes".into()),
+    );
+    fs::write(bench.at("notes"), "kept").unwrap();
+
+    assert_eq!(undo(&client, made), Outcome::Done);
+
+    assert!(!bench.at("notes").exists());
+    let trashed = home_trash_files(&bench.root).join("notes");
+    assert_eq!(fs::read_to_string(trashed).unwrap(), "kept");
+}
+
+#[test]
 fn what_changed_since_is_left_alone() {
     let bench = Bench::new("undo-changed");
     fs::write(bench.at("old"), "x").unwrap();

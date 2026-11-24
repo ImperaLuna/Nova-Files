@@ -192,7 +192,8 @@ fn down_moves_into_the_results_and_enter_opens_a_file_where_it_is(cx: &mut TestA
         .into_iter()
         .filter_map(|command| match command {
             nova_files_open_api::Command::OpenFile { path, .. } => Some(path),
-            nova_files_open_api::Command::OpenWith(_) => None,
+            nova_files_open_api::Command::OpenWith(_)
+            | nova_files_open_api::Command::OpenTerminal { .. } => None,
         })
         .collect();
     assert_eq!(opened, [PathBuf::from("/docs/report.pdf")]);

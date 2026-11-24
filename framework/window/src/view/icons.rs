@@ -95,7 +95,7 @@ impl MainWindow {
         });
         cell(index, at, grid, cx)
             .when(hidden, |cell| cell.text_color(colors.text_dim))
-            .when_some(folder_at, |cell, at| self.drop_target(cell, at, cx))
+            .when_some(folder_at, |cell, at| self.folder_target(cell, at, cx))
             .when(self.selects(at), |cell| {
                 cell.bg(colors.selected).text_color(colors.text)
             })

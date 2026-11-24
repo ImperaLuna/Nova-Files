@@ -40,6 +40,7 @@ gpui::actions!(
         DeleteSelected,
         RenameSelected,
         NewFolder,
+        NewFile,
         Duplicate,
         Undo,
         TogglePreview,
