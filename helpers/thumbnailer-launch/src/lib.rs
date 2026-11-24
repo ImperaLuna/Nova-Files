@@ -1,3 +1,5 @@
+mod document;
+
 use std::env;
 use std::ffi::OsString;
 use std::io::{BufRead as _, BufReader, Read};
@@ -22,6 +24,8 @@ const MIN_MOVING_FRAMES: usize = 2;
 const MAX_MOVING_BYTES: u64 = 256 * 1024 * 1024;
 const LINE_END: u8 = b'\n';
 const SIZE_SEPARATOR: char = ' ';
+
+pub use document::{Document, Opened, PageSize, document};
 
 #[derive(Debug, Clone)]
 pub struct Job {
@@ -102,6 +106,14 @@ impl Running {
 
     fn finish(&self) {
         *self.0.lock().unwrap_or_else(PoisonError::into_inner) = None;
+    }
+
+    fn forget(&self, group: Option<Pid>) {
+        let mut running = self.0.lock().unwrap_or_else(PoisonError::into_inner);
+        if *running == group {
+            *running = None;
+        }
+        drop(running);
     }
 }
 

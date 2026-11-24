@@ -356,6 +356,7 @@ impl PreviewPart {
         match event {
             Event::Previewed { id, preview } => self.preview_arrived(id, Some(preview), cx),
             Event::Unreadable { id, .. } => self.preview_arrived(id, None, cx),
+            Event::Paged { .. } => {}
         }
     }
 

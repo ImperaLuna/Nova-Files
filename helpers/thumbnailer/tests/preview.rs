@@ -170,7 +170,9 @@ fn stepping_through_pictures_answers_the_last() {
                 break;
             }
             Event::Previewed { id, .. } => assert!(id < last),
-            other @ Event::Unreadable { .. } => panic!("expected a preview, got {other:?}"),
+            other @ (Event::Unreadable { .. } | Event::Paged { .. }) => {
+                panic!("expected a preview, got {other:?}")
+            }
         }
     }
 }
@@ -278,4 +280,137 @@ fn a_drawing_is_drawn_to_fill_the_box() {
         &picture.pixels[..4],
         [ORANGE[0], ORANGE[1], ORANGE[2], OPAQUE]
     );
+}
+
+fn pdf(pages: &[(u32, u32)], encrypt: bool) -> Vec<u8> {
+    let kids: Vec<String> = (0..pages.len()).map(|n| format!("{} 0 R", n + 3)).collect();
+    let mut objects = vec![
+        "<< /Type /Catalog /Pages 2 0 R >>".to_owned(),
+        format!(
+            "<< /Type /Pages /Kids [{}] /Count {} >>",
+            kids.join(" "),
+            pages.len()
+        ),
+    ];
+    for (width, height) in pages {
+        objects.push(format!(
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 {width} {height}] >>"
+        ));
+    }
+    if encrypt {
+        let hex = "AB".repeat(32);
+        objects.push(format!(
+            "<< /Filter /Standard /V 1 /R 2 /O <{hex}> /U <{hex}> /P -4 >>"
+        ));
+    }
+    let mut out = b"%PDF-1.4\n".to_vec();
+    let mut offsets = Vec::new();
+    for (n, object) in objects.iter().enumerate() {
+        offsets.push(out.len());
+        out.extend(format!("{} 0 obj\n{object}\nendobj\n", n + 1).bytes());
+    }
+    let xref = out.len();
+    out.extend(format!("xref\n0 {}\n0000000000 65535 f \n", objects.len() + 1).bytes());
+    for offset in offsets {
+        out.extend(format!("{offset:010} 00000 n \n").bytes());
+    }
+    let encryption = if encrypt {
+        format!(
+            " /Encrypt {} 0 R /ID [<{id}> <{id}>]",
+            objects.len(),
+            id = "01".repeat(16)
+        )
+    } else {
+        String::new()
+    };
+    out.extend(
+        format!(
+            "trailer\n<< /Size {} /Root 1 0 R{encryption} >>\nstartxref\n{xref}\n%%EOF\n",
+            objects.len() + 1
+        )
+        .bytes(),
+    );
+    out
+}
+
+impl Client {
+    fn page(&self, id: u64, index: usize, width: u32) -> Option<Picture> {
+        self.connection
+            .send(Command::Page {
+                id: PreviewId(id),
+                index,
+                width,
+            })
+            .unwrap();
+        match self.events.recv_timeout(WAIT).unwrap() {
+            Event::Paged {
+                id: got,
+                index: page,
+                picture,
+            } if got == PreviewId(id) && page == index => picture,
+            other => panic!("expected a page, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn a_pdf_names_its_pages_and_draws_the_one_asked_for() {
+    let temp = TestFolder::new("preview-pdf");
+    let path = temp.join("letter.pdf");
+    fs::write(&path, pdf(&[(612, 792), (842, 595), (100, 200)], false)).unwrap();
+    let client = Client::new(temp.path());
+    let fit = Fit {
+        width: 100,
+        height: 100,
+    };
+
+    let shown = client.preview(1, &path, fit);
+
+    let PreviewContent::Document { pages } = &shown.content else {
+        panic!("expected a document, got {:?}", shown.content);
+    };
+    let sizes: Vec<_> = pages.iter().map(|page| (page.width, page.height)).collect();
+    assert_eq!(sizes, vec![(612, 792), (842, 595), (100, 200)]);
+    let page = client.page(1, 1, 842).unwrap();
+    assert_eq!((page.width, page.height), (842, 595));
+    assert_eq!(&page.pixels[..4], [OPAQUE; 4]);
+    assert_eq!(client.page(1, 3, 100), None);
+}
+
+#[test]
+fn a_pdf_with_a_password_says_it_is_locked() {
+    let temp = TestFolder::new("preview-locked");
+    let path = temp.join("secret.pdf");
+    fs::write(&path, pdf(&[(612, 792)], true)).unwrap();
+    let client = Client::new(temp.path());
+
+    let shown = client.preview(
+        1,
+        &path,
+        Fit {
+            width: 100,
+            height: 100,
+        },
+    );
+
+    assert_eq!(shown.content, PreviewContent::Locked);
+}
+
+#[test]
+fn a_broken_pdf_shows_its_icon() {
+    let temp = TestFolder::new("preview-broken-pdf");
+    let path = temp.join("broken.pdf");
+    fs::write(&path, b"%PDF-1.4\nnothing else").unwrap();
+    let client = Client::new(temp.path());
+
+    let shown = client.preview(
+        1,
+        &path,
+        Fit {
+            width: 100,
+            height: 100,
+        },
+    );
+
+    assert_eq!(shown.content, PreviewContent::Icon);
 }
