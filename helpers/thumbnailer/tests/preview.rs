@@ -219,3 +219,63 @@ fn a_text_file_is_not_sent_to_the_helper() {
         }
     );
 }
+
+#[test]
+fn a_moving_gif_comes_with_every_frame() {
+    use image::codecs::gif::GifEncoder;
+    use image::{Delay, Frame, Rgba, RgbaImage};
+    let temp = TestFolder::new("preview-gif");
+    let path = temp.join("spin.gif");
+    let mut encoder = GifEncoder::new(fs::File::create(&path).unwrap());
+    for shade in [0, 120, 240] {
+        let image = RgbaImage::from_pixel(8, 8, Rgba([shade, 0, 0, OPAQUE]));
+        let frame = Frame::from_parts(image, 0, 0, Delay::from_numer_denom_ms(60, 1));
+        encoder.encode_frame(frame).unwrap();
+    }
+    drop(encoder);
+    let client = Client::new(temp.path());
+
+    let shown = client.preview(
+        1,
+        &path,
+        Fit {
+            width: 100,
+            height: 100,
+        },
+    );
+
+    let PreviewContent::Moving(frames) = &shown.content else {
+        panic!("expected a moving picture, got {:?}", shown.content);
+    };
+    assert_eq!(frames.len(), 3);
+    assert_eq!(frames[0].delay, Duration::from_millis(60));
+    assert_eq!((frames[2].picture.width, frames[2].picture.height), (8, 8));
+}
+
+#[test]
+fn a_drawing_is_drawn_to_fill_the_box() {
+    let temp = TestFolder::new("preview-svg");
+    let path = temp.join("bar.svg");
+    fs::write(
+        &path,
+        r##"<svg xmlns="http://www.w3.org/2000/svg" width="20" height="10"><rect width="20" height="10" fill="#FD7014"/></svg>"##,
+    )
+    .unwrap();
+    let client = Client::new(temp.path());
+
+    let shown = client.preview(
+        1,
+        &path,
+        Fit {
+            width: 100,
+            height: 100,
+        },
+    );
+
+    let picture = picture(&shown);
+    assert_eq!((picture.width, picture.height), (100, 50));
+    assert_eq!(
+        &picture.pixels[..4],
+        [ORANGE[0], ORANGE[1], ORANGE[2], OPAQUE]
+    );
+}

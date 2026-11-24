@@ -14,7 +14,7 @@ use nova_files_api::{EventSink, Fit, Unreadable};
 use nova_files_disk::ports::Mimes;
 use nova_files_entries_core::list::{self, Stopped};
 use nova_files_preview_api::{
-    Event, PREVIEW_ENTRIES, PREVIEW_TEXT_BYTES, Preview, PreviewContent, PreviewId,
+    Event, Frame, PREVIEW_ENTRIES, PREVIEW_TEXT_BYTES, Preview, PreviewContent, PreviewId,
 };
 use nova_files_thumbnailer_launch::{self as launch, Running};
 use rustix::fs::OFlags;
@@ -23,11 +23,14 @@ const THREAD_NAME: &str = "nova-files-preview";
 
 const NUL: u8 = 0;
 
-const PICTURE_SIGNATURES: [&[(usize, &[u8])]; 3] = [
+const PICTURE_SIGNATURES: [&[(usize, &[u8])]; 5] = [
     &[(0, &[0xFF, 0xD8, 0xFF])],
     &[(0, b"\x89PNG\r\n\x1a\n")],
     &[(0, b"RIFF"), (8, b"WEBP")],
+    &[(0, b"GIF87a")],
+    &[(0, b"GIF89a")],
 ];
+const DRAWING_EXTENSIONS: [&str; 2] = ["svg", "svgz"];
 
 #[derive(Debug, Default)]
 pub struct Current {
@@ -119,7 +122,9 @@ fn event(request: &Request) -> Option<Event> {
         }
         match (start(path, &metadata), &request.helper) {
             (Err(error), _) => return Some(unreadable(list::unreadable(&error))),
-            (Ok(Some(start)), Some(helper)) if is_picture(&start) => picture(request, helper)?,
+            (Ok(Some(start)), Some(helper)) if is_picture(&start) || is_drawing(path) => {
+                picture(request, helper)?
+            }
             (Ok(Some(start)), _) => text(start, metadata.len()),
             (Ok(None), _) => PreviewContent::Icon,
         }
@@ -175,8 +180,18 @@ fn picture(request: &Request, helper: &Path) -> Option<PreviewContent> {
     }
     let current = &request.current;
     let wanted = || current.is(request.id);
-    let picture = launch::picture(helper, &request.path, request.fit, &current.running, wanted);
-    Some(picture.map_or(PreviewContent::Icon, PreviewContent::Picture))
+    let frames = launch::picture(helper, &request.path, request.fit, &current.running, wanted);
+    let mut frames = frames.unwrap_or_default();
+    Some(match frames.len() {
+        0 => PreviewContent::Icon,
+        1 => PreviewContent::Picture(frames.remove(0).0),
+        _ => PreviewContent::Moving(
+            frames
+                .into_iter()
+                .map(|(picture, delay)| Frame { picture, delay })
+                .collect(),
+        ),
+    })
 }
 
 fn folder(path: &Path, cancelled: impl Fn() -> bool) -> Result<PreviewContent, Stopped> {
@@ -198,6 +213,17 @@ fn start(path: &Path, metadata: &Metadata) -> io::Result<Option<Vec<u8>>> {
     let limit = u64::try_from(PREVIEW_TEXT_BYTES).unwrap_or(u64::MAX);
     opened.take(limit).read_to_end(&mut start)?;
     Ok(Some(start))
+}
+
+fn is_drawing(path: &Path) -> bool {
+    target(path)
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| {
+            DRAWING_EXTENSIONS
+                .iter()
+                .any(|drawing| extension.eq_ignore_ascii_case(drawing))
+        })
 }
 
 fn is_picture(start: &[u8]) -> bool {
@@ -357,7 +383,9 @@ mod tests {
         assert!(!is_picture(b"RIFF\0\0\0\0WAVEfmt "));
         assert!(!is_picture(b"RIFF"));
         assert!(!is_picture(b"\x89PNG"));
-        assert!(!is_picture(b"GIF89a"));
+        assert!(is_picture(b"GIF89a"));
+        assert!(is_picture(b"GIF87a"));
+        assert!(!is_picture(b"GIF"));
         assert!(!is_picture(b""));
     }
 

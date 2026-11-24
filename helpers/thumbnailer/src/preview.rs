@@ -3,8 +3,12 @@ use std::io::{self, Write as _};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
+use image::RgbaImage;
+
+use crate::moving;
 use crate::render;
 use crate::sandbox;
+use crate::vector;
 
 pub const FLAG: &str = "--preview";
 pub const USAGE: &str = "usage: nova-files-thumbnailer --preview <file> <width> <height>";
@@ -42,28 +46,54 @@ pub fn run(request: &Request) -> ExitCode {
         writeln!(io::stderr(), "could not start the sandbox: {error}").ok();
         return ExitCode::FAILURE;
     }
-    if !render::built_in(&request.file) {
+    let (file, width, height) = (&request.file, request.width, request.height);
+    let sent = if vector::is_svg(file) {
+        let Some(image) = vector::draw(file, width, height) else {
+            return ExitCode::FAILURE;
+        };
+        send_still(&image)
+    } else if !render::built_in(file) {
         return ExitCode::FAILURE;
-    }
-    let Ok(image) = render::decode(&request.file) else {
-        return ExitCode::FAILURE;
-    };
-    let fits = image.width() <= request.width && image.height() <= request.height;
-    let image = if fits {
-        image
+    } else if let Some(frames) = moving::frames(file, width, height) {
+        send_moving(&frames)
     } else {
-        image.thumbnail(request.width, request.height)
+        let Ok(image) = render::decode(file) else {
+            return ExitCode::FAILURE;
+        };
+        let fits = image.width() <= width && image.height() <= height;
+        let image = if fits {
+            image
+        } else {
+            image.thumbnail(width, height)
+        };
+        send_still(&image.into_rgba8())
     };
-    let pixels = image.into_rgba8();
-    let mut out = io::stdout().lock();
-    let sent = writeln!(out, "{} {}", pixels.width(), pixels.height())
-        .and_then(|()| out.write_all(pixels.as_raw()))
-        .and_then(|()| out.flush());
     if sent.is_ok() {
         ExitCode::SUCCESS
     } else {
         ExitCode::FAILURE
     }
+}
+
+fn send_still(image: &RgbaImage) -> io::Result<()> {
+    let mut out = io::stdout().lock();
+    writeln!(out, "{} {}", image.width(), image.height())?;
+    out.write_all(image.as_raw())?;
+    out.flush()
+}
+
+fn send_moving(frames: &[moving::Frame]) -> io::Result<()> {
+    let Some(first) = frames.first() else {
+        return Ok(());
+    };
+    let mut out = io::stdout().lock();
+    let (width, height) = first.image.dimensions();
+    writeln!(out, "{width} {height} {}", frames.len())?;
+    for frame in frames {
+        writeln!(out, "{}", frame.delay.as_millis())?;
+        out.write_all(frame.image.as_raw())?;
+    }
+    out.flush()
 }
 
 #[cfg(test)]

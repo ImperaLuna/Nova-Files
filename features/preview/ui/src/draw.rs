@@ -140,7 +140,7 @@ fn art(
     };
     let (name, kind) = (&entry.name, entry.kind);
     match (&preview.content, &shown.picture) {
-        (PreviewContent::Picture(_), Some(picture)) => {
+        (PreviewContent::Picture(_) | PreviewContent::Moving(_), Some(picture)) => {
             picture_art(picture, room, scale_factor, colors).into_any_element()
         }
         (PreviewContent::Text { text, .. }, _) => text_art(text, room, colors).into_any_element(),

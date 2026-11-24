@@ -16,7 +16,8 @@ const PASSED_VARS: [&str; 4] = ["PATH", "HOME", "XDG_DATA_HOME", "XDG_DATA_DIRS"
 const READER_THREAD: &str = "nova-files-thumbnail-reader";
 const PREVIEW_FLAG: &str = "--preview";
 const BYTES_PER_PIXEL: u64 = 4;
-const MAX_SIZE_LINE: usize = 22;
+const MAX_SIZE_LINE: usize = 32;
+const MAX_FRAMES: usize = 2000;
 const LINE_END: u8 = b'\n';
 const SIZE_SEPARATOR: char = ' ';
 
@@ -108,7 +109,7 @@ pub fn picture(
     fit: Fit,
     running: &Running,
     wanted: impl Fn() -> bool,
-) -> Option<Picture> {
+) -> Option<Vec<(Picture, Duration)>> {
     let fit = fit.clamped();
     let mut command = command(helper);
     command
@@ -159,32 +160,51 @@ fn end(child: &mut Child) {
     child.wait().ok();
 }
 
-fn read_picture(mut output: impl Read, fit: Fit) -> Option<Picture> {
+fn read_picture(mut output: impl Read, fit: Fit) -> Option<Vec<(Picture, Duration)>> {
+    let line = read_line(&mut output)?;
+    let mut words = line.split(SIZE_SEPARATOR);
+    let width: u32 = words.next()?.parse().ok()?;
+    let height: u32 = words.next()?.parse().ok()?;
+    let count: usize = match words.next() {
+        Some(count) => count.parse().ok().filter(|count| *count > 1)?,
+        None => 1,
+    };
+    let fits = (1..=fit.width).contains(&width) && (1..=fit.height).contains(&height);
+    if words.next().is_some() || !fits {
+        return None;
+    }
+    let length = usize::try_from(u64::from(width) * u64::from(height) * BYTES_PER_PIXEL).ok()?;
+    let mut frames = Vec::with_capacity(count.min(MAX_FRAMES));
+    for _ in 0..count {
+        let delay = if count == 1 {
+            Duration::ZERO
+        } else {
+            Duration::from_millis(read_line(&mut output)?.parse().ok()?)
+        };
+        let mut pixels = vec![0; length];
+        output.read_exact(&mut pixels).ok()?;
+        let picture = Picture {
+            width,
+            height,
+            pixels: pixels.into(),
+        };
+        frames.push((picture, delay));
+    }
+    let mut byte = [0];
+    (output.read(&mut byte).ok()? == 0).then_some(frames)
+}
+
+fn read_line(output: &mut impl Read) -> Option<String> {
     let mut line = Vec::with_capacity(MAX_SIZE_LINE);
     let mut byte = [0];
     while line.len() < MAX_SIZE_LINE {
         output.read_exact(&mut byte).ok()?;
         if byte[0] == LINE_END {
-            break;
+            return String::from_utf8(line).ok();
         }
         line.push(byte[0]);
     }
-    let (width, height) = std::str::from_utf8(&line)
-        .ok()?
-        .split_once(SIZE_SEPARATOR)?;
-    let (width, height): (u32, u32) = (width.parse().ok()?, height.parse().ok()?);
-    let fits = (1..=fit.width).contains(&width) && (1..=fit.height).contains(&height);
-    if !fits {
-        return None;
-    }
-    let length = u64::from(width) * u64::from(height) * BYTES_PER_PIXEL;
-    let mut pixels = vec![0; usize::try_from(length).ok()?];
-    output.read_exact(&mut pixels).ok()?;
-    (output.read(&mut byte).ok()? == 0).then(|| Picture {
-        width,
-        height,
-        pixels: pixels.into(),
-    })
+    None
 }
 
 #[cfg(test)]
@@ -204,7 +224,25 @@ mod tests {
     }
 
     fn parse(answer: &[u8], fit: Fit) -> Option<Picture> {
-        read_picture(answer, fit)
+        let mut frames = read_picture(answer, fit)?;
+        assert_eq!(frames.len(), 1);
+        Some(frames.remove(0).0)
+    }
+
+    #[test]
+    fn a_moving_answer_gives_each_frame_and_its_delay() {
+        let mut answer = b"2 1 2\n".to_vec();
+        answer.extend(b"70\n");
+        answer.extend([1; 8]);
+        answer.extend(b"40\n");
+        answer.extend([2; 8]);
+        let frames = read_picture(answer.as_slice(), FIT).unwrap();
+        let delays: Vec<_> = frames.iter().map(|(_, delay)| delay.as_millis()).collect();
+        assert_eq!(delays, vec![70, 40]);
+        assert_eq!(&*frames[1].0.pixels, &[2; 8]);
+        answer.truncate(answer.len() - 1);
+        assert!(read_picture(answer.as_slice(), FIT).is_none());
+        assert!(read_picture(b"2 1 1\n".as_slice(), FIT).is_none());
     }
 
     #[test]

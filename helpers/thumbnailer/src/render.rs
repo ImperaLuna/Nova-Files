@@ -126,7 +126,7 @@ pub fn built_in(path: &Path) -> bool {
         .or_else(|| ImageFormat::from_path(path).ok());
     matches!(
         format,
-        Some(ImageFormat::Jpeg | ImageFormat::Png | ImageFormat::WebP)
+        Some(ImageFormat::Jpeg | ImageFormat::Png | ImageFormat::WebP | ImageFormat::Gif)
     )
 }
 

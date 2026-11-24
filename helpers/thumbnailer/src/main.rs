@@ -3,11 +3,13 @@
 mod batch;
 mod data_dirs;
 mod mime;
+mod moving;
 mod png_text;
 mod preview;
 mod render;
 mod sandbox;
 mod system;
+mod vector;
 
 use std::io::{self, Write as _};
 use std::process::ExitCode;
