@@ -332,3 +332,27 @@ async fn a_second_click_on_the_icon_does_not_rename(cx: &mut TestAppContext) {
         ["notes.txt"]
     );
 }
+
+#[gpui::test]
+async fn duplicate_copies_beside_the_original_and_undo_takes_the_copy_back(
+    cx: &mut TestAppContext,
+) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("duplicate");
+    let home = TempFolder::tree("duplicate-home");
+    fs::write(tree.path().join("notes.txt"), "mine").unwrap();
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+
+    click(cx, "name-1");
+    cx.simulate_keystrokes("ctrl-d");
+    wait_for_names(&view, cx, &["Projects", "notes (2).txt", "notes.txt"]).await;
+    assert_eq!(
+        fs::read_to_string(tree.path().join("notes (2).txt")).unwrap(),
+        "mine"
+    );
+    cx.simulate_keystrokes("ctrl-z");
+    wait_for_names(&view, cx, &["Projects", "notes.txt"]).await;
+
+    cx.simulate_keystrokes("f2 home ctrl-d enter");
+    wait_for_names(&view, cx, &["Projects", "otes.txt"]).await;
+}

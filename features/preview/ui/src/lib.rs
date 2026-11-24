@@ -11,8 +11,8 @@ use gpui::{AnyElement, App, Context, Pixels, RenderImage, Size, Subscription, Wi
 use nova_files_api::{Entry, EntryId, Fit, Listing, ListingId};
 use nova_files_preview_api::{Command, Event, Preview, PreviewContent, PreviewId};
 use nova_files_shell::actions::{
-    ClearSelection, CursorDown, CursorUp, DeleteSelected, NewFolder, OpenSelected, PreviewNext,
-    PreviewPrevious, RenameSelected, TogglePreview, TrashSelected, Undo,
+    ClearSelection, CursorDown, CursorUp, DeleteSelected, Duplicate, NewFolder, OpenSelected,
+    PreviewNext, PreviewPrevious, RenameSelected, TogglePreview, TrashSelected, Undo,
 };
 use nova_files_shell::device::device_side;
 use nova_files_shell::theme::Colors;
@@ -471,6 +471,7 @@ impl Part for PreviewPart {
         slots.before(Self::holds::<DeleteSelected>);
         slots.before(Self::holds::<RenameSelected>);
         slots.before(Self::holds::<NewFolder>);
+        slots.before(Self::holds::<Duplicate>);
         slots.before(Self::holds::<Undo>);
         slots.staged(Self::stage);
         slots.layer(Self::layer);

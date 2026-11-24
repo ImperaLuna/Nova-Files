@@ -53,6 +53,7 @@ async fn an_archive_offers_extract_in_its_own_group(cx: &mut TestAppContext) {
                 "Cut",
                 "Copy",
                 "Rename",
+                "Duplicate",
                 "Compress",
                 "Compress as…",
                 "Move to Trash",
@@ -60,7 +61,7 @@ async fn an_archive_offers_extract_in_its_own_group(cx: &mut TestAppContext) {
             ]
             .map(str::to_owned)
             .to_vec(),
-            vec![2, 4, 9, 10]
+            vec![2, 4, 10, 11]
         )
     );
 
@@ -134,6 +135,7 @@ async fn an_opened_archive_offers_extract_all_and_nothing_that_changes_it(cx: &m
     for changes in [
         "Compress",
         "Rename",
+        "Duplicate",
         "Cut",
         "Move to Trash",
         "Extract here",

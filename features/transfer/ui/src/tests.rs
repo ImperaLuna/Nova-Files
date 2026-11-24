@@ -59,3 +59,14 @@ fn an_answer_for_an_earlier_drag_is_not_kept() {
     assert!(drives.answered(DropAskId(1), DropKind::Move).is_some());
     assert_eq!(drives.kind(&paths(&["/a/y"]), &into), Lookup::Asked);
 }
+
+#[test]
+fn duplicates_go_beside_their_originals_one_folder_at_a_time() {
+    assert_eq!(
+        by_folder(paths(&["/a/x", "/b/y", "/a/z", "/"])),
+        vec![
+            (PathBuf::from("/a"), paths(&["/a/x", "/a/z"])),
+            (PathBuf::from("/b"), paths(&["/b/y"])),
+        ]
+    );
+}
