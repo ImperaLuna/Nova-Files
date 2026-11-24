@@ -16,7 +16,7 @@ pub fn arrange(
 ) -> Option<Vec<Entry>> {
     let paired: Vec<(Entry, ())> = entries.into_iter().map(|entry| (entry, ())).collect();
     if order.key == SortKey::Kind {
-        let sorted = by_kind(paired, kinds, order.descending);
+        let sorted = by_kind(paired, kinds, order.descending, cancelled)?;
         return Some(sorted.into_iter().map(|(entry, ())| entry).collect());
     }
     let arranged = arrange_paired(
@@ -93,26 +93,45 @@ pub(crate) fn sorted_with_details<T>(
     Some(paired)
 }
 
-pub fn arrange_known(listed: Inner, order: Order, kinds: &dyn Icons) -> Inner {
+pub fn arrange_known(
+    listed: Inner,
+    order: Order,
+    kinds: &dyn Icons,
+    cancelled: impl Fn() -> bool,
+) -> Option<Inner> {
     if order.key != SortKey::Kind {
-        return listed;
+        return Some(listed);
     }
-    let (entries, details) = listed?;
+    let Ok((entries, details)) = listed else {
+        return Some(listed);
+    };
     let paired = entries.into_iter().zip(details).collect();
-    Ok(by_kind(paired, kinds, order.descending).into_iter().unzip())
+    let sorted = by_kind(paired, kinds, order.descending, cancelled)?;
+    Some(Ok(sorted.into_iter().unzip()))
 }
 
-fn by_kind<T>(entries: Vec<(Entry, T)>, kinds: &dyn Icons, descending: bool) -> Vec<(Entry, T)> {
-    let mut named: Vec<_> = entries
-        .into_iter()
-        .map(|(entry, carried)| (kinds.kind_name(&entry.name, entry.kind), (entry, carried)))
-        .collect();
+fn by_kind<T>(
+    entries: Vec<(Entry, T)>,
+    kinds: &dyn Icons,
+    descending: bool,
+    cancelled: impl Fn() -> bool,
+) -> Option<Vec<(Entry, T)>> {
+    let mut named = Vec::with_capacity(entries.len());
+    for (entry, carried) in entries {
+        if cancelled() {
+            return None;
+        }
+        let kind = kinds
+            .kind_name(&entry.name, entry.kind)
+            .map(|kind| kind.to_lowercase());
+        named.push((kind, (entry, carried)));
+    }
     named.sort_by(|(left_kind, (left, _)), (right_kind, (right, _))| {
         group(left)
             .cmp(&group(right))
             .then_with(|| known_first(left_kind.as_deref(), right_kind.as_deref(), descending))
     });
-    named
+    let renumbered = named
         .into_iter()
         .zip(0..)
         .map(|((_, (entry, carried)), index)| {
@@ -122,7 +141,8 @@ fn by_kind<T>(entries: Vec<(Entry, T)>, kinds: &dyn Icons, descending: bool) -> 
             };
             (entry, carried)
         })
-        .collect()
+        .collect();
+    Some(renumbered)
 }
 
 fn group(entry: &Entry) -> bool {
@@ -173,6 +193,7 @@ mod tests {
             let word = match (kind, ending) {
                 (EntryKind::File, "txt") => "Plain text",
                 (EntryKind::File, "md") => "Markdown document",
+                (EntryKind::File, "gltf") => "glTF model",
                 _ => return None,
             };
             Some(Arc::from(word))
@@ -262,7 +283,14 @@ mod tests {
         let folder = TempFolder::new("kind");
         folder.folder("b.txt");
         folder.folder("a");
-        for name in ["z.txt", "notes.md", "big.bin", "a.txt", "readme.md"] {
+        for name in [
+            "z.txt",
+            "notes.md",
+            "big.bin",
+            "m.gltf",
+            "a.txt",
+            "readme.md",
+        ] {
             folder.file(name, 0, 0);
         }
         assert_eq!(
@@ -270,6 +298,7 @@ mod tests {
             [
                 "a",
                 "b.txt",
+                "m.gltf",
                 "notes.md",
                 "readme.md",
                 "a.txt",
@@ -286,6 +315,7 @@ mod tests {
                 "z.txt",
                 "notes.md",
                 "readme.md",
+                "m.gltf",
                 "big.bin"
             ]
         );
@@ -311,12 +341,13 @@ mod tests {
             descending: false,
         };
         assert_eq!(
-            arrange_known(listed, order, &ByEnding),
-            Ok((
+            arrange_known(listed.clone(), order, &ByEnding, || false),
+            Some(Ok((
                 vec![file(0, "b.md"), file(1, "a.txt")],
                 vec![details(2), details(1)]
-            ))
+            )))
         );
+        assert_eq!(arrange_known(listed, order, &ByEnding, || true), None);
     }
 
     #[test]
@@ -387,6 +418,14 @@ mod tests {
         };
         assert_eq!(
             arrange(folder.0.path(), listed.clone(), order, &ByEnding, cancelled),
+            None
+        );
+        let by_kind = Order {
+            key: SortKey::Kind,
+            descending: false,
+        };
+        assert_eq!(
+            arrange(folder.0.path(), listed.clone(), by_kind, &ByEnding, || true),
             None
         );
         let by_name = Order::default();

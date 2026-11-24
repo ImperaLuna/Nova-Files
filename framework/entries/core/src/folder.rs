@@ -53,7 +53,9 @@ pub fn list_folder(
                         .then(|| inner.list(&job_path, order, hidden))
                         .flatten()
                         .map(|listed| list::keep_named_known(listed, &filter))
-                        .map(|listed| order::arrange_known(listed, order, job.kinds()));
+                        .and_then(|listed| {
+                            order::arrange_known(listed, order, job.kinds(), cancelled)
+                        });
                     match elsewhere {
                         Some(listed) => send_inner(&job, (id, job_path), listed),
                         None => job.answer(Event::FolderUnreadable {
