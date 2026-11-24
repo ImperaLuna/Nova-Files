@@ -1,5 +1,7 @@
 #![forbid(unsafe_code)]
 
+use std::collections::HashSet;
+use std::mem;
 use std::panic::{self, AssertUnwindSafe};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -59,12 +61,29 @@ struct State {
 }
 
 struct Live {
-    index: Index,
+    index: Arc<Index>,
     overlay: Overlay,
     log: LogReader,
     changes: usize,
     lost: bool,
-    watcher: Watcher,
+    watching: Watching,
+}
+
+struct Early {
+    index: Arc<Index>,
+    read: usize,
+    shown: HashSet<PathBuf>,
+    held: Vec<Hit>,
+}
+
+struct Last {
+    hits: Vec<Hit>,
+    outdated: bool,
+}
+
+enum Watching {
+    CatchingUp,
+    Running(Watcher),
 }
 
 impl Searcher {
@@ -194,7 +213,11 @@ impl Searcher {
         }
         if search.is_done() {
             answer(Vec::new(), true);
+            return true;
         }
+        let catching_up = matches!(live.watching, Watching::CatchingUp);
+        let mut shown = HashSet::new();
+        let mut early = None;
         for _ in 0..STAGES {
             if !wanted() {
                 break;
@@ -202,19 +225,63 @@ impl Searcher {
             let Some(hits) = search.next() else {
                 break;
             };
-            let hits = hits.into_iter().map(|hit| Hit {
-                path: hit.path,
-                matched: matched(hit.kind),
-            });
-            if !answer(hits.collect(), search.is_done()) {
+            if catching_up && search.is_done() {
+                early = Some(Early {
+                    index: Arc::clone(&live.index),
+                    read: live.changes,
+                    shown: mem::take(&mut shown),
+                    held: hits.into_iter().map(told).collect(),
+                });
+                break;
+            }
+            if catching_up {
+                shown.extend(hits.iter().map(|hit| hit.path.clone()));
+            }
+            if !answer(hits.into_iter().map(told).collect(), search.is_done()) {
                 break;
             }
         }
         drop(state);
+        let last = early.and_then(|early| self.caught_up(query, early, &wanted));
+        let outdated = last.as_ref().map_or(outdated, |last| last.outdated);
+        if let Some(last) = last {
+            answer(last.hits, true);
+        }
         if outdated {
             self.start_build(true);
         }
         true
+    }
+
+    fn caught_up(
+        &self,
+        query: &Query<'_>,
+        early: Early,
+        wanted: impl Fn() -> bool,
+    ) -> Option<Last> {
+        let shared = &self.shared;
+        let state = shared.state.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut state = shared
+            .built
+            .wait_while(state, |state| {
+                state
+                    .live
+                    .as_ref()
+                    .is_some_and(|live| matches!(live.watching, Watching::CatchingUp))
+            })
+            .unwrap_or_else(PoisonError::into_inner);
+        if !wanted() {
+            return None;
+        }
+        let last = match &mut state.live {
+            Some(live) => live.last_stage(query, early),
+            None => Last {
+                hits: early.held,
+                outdated: false,
+            },
+        };
+        drop(state);
+        Some(last)
     }
 
     fn start_build(&self, fresh: bool) {
@@ -232,19 +299,24 @@ impl Searcher {
         let spawned = thread::Builder::new()
             .name(INDEX_THREAD.to_owned())
             .spawn(move || {
-                let live =
-                    panic::catch_unwind(AssertUnwindSafe(|| Live::start(&place, &root, fresh)))
+                let opened =
+                    panic::catch_unwind(AssertUnwindSafe(|| Live::open(&place, &root, fresh)))
                         .ok()
                         .flatten();
-                {
-                    let mut state = job.state.lock().unwrap_or_else(PoisonError::into_inner);
-                    state.building = false;
-                    state.failed = live.is_none();
-                    if live.is_some() {
-                        state.live = live;
-                    }
-                }
-                job.built.notify_all();
+                let watch = opened.map(|(live, log)| {
+                    let index = Arc::clone(&live.index);
+                    job.settle(Some(live));
+                    (index, log)
+                });
+                let Some((index, log)) = watch else {
+                    job.settle(None);
+                    return;
+                };
+                let watcher =
+                    panic::catch_unwind(AssertUnwindSafe(|| Watcher::start(&index, log, || {})))
+                        .ok()
+                        .and_then(Result::ok);
+                job.watch(&index, watcher);
             });
         if spawned.is_err() {
             let mut state = shared.state.lock().unwrap_or_else(PoisonError::into_inner);
@@ -256,8 +328,43 @@ impl Searcher {
     }
 }
 
+impl Shared {
+    fn settle(&self, live: Option<Live>) {
+        {
+            let mut state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
+            state.building = false;
+            state.failed = live.is_none();
+            if live.is_some() {
+                state.live = live;
+            }
+        }
+        self.built.notify_all();
+    }
+
+    fn watch(&self, index: &Arc<Index>, watcher: Option<Watcher>) {
+        let mut state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
+        let started = watcher.is_some();
+        let current = state
+            .live
+            .as_mut()
+            .filter(|live| Arc::ptr_eq(&live.index, index))
+            .map(|live| {
+                if let Some(watcher) = watcher {
+                    live.watching = Watching::Running(watcher);
+                }
+            })
+            .is_some();
+        if current && !started {
+            state.live = None;
+            state.failed = true;
+        }
+        drop(state);
+        self.built.notify_all();
+    }
+}
+
 impl Live {
-    fn start(place: &IndexPlace, root: &Path, fresh: bool) -> Option<Self> {
+    fn open(place: &IndexPlace, root: &Path, fresh: bool) -> Option<(Self, ChangeLog)> {
         let opened = if fresh { None } else { place.open(root).ok() };
         let index = if let Some(index) = opened {
             index
@@ -267,19 +374,47 @@ impl Live {
         };
         let log = ChangeLog::create(&place.changes(), index.crawled()).ok()?;
         let reader = LogReader::open(&place.changes()).ok()?;
-        let watcher = Watcher::start(&index, log, || {}).ok()?;
-        Some(Self {
-            index,
+        let live = Self {
+            index: Arc::new(index),
             overlay: Overlay::new(),
             log: reader,
             changes: 0,
             lost: false,
-            watcher,
-        })
+            watching: Watching::CatchingUp,
+        };
+        Some((live, log))
+    }
+
+    fn last_stage(&mut self, query: &Query<'_>, early: Early) -> Last {
+        self.read_log();
+        let outdated = self.lost || self.changes > REBUILD_AFTER;
+        if Arc::ptr_eq(&self.index, &early.index) && self.changes == early.read {
+            return Last {
+                hits: early.held,
+                outdated,
+            };
+        }
+        let mut search = self
+            .index
+            .search_now(query.text, query.limit, &self.overlay);
+        if let Some(folder) = query.within {
+            search = search.within(folder);
+        }
+        let hits = search
+            .flatten()
+            .filter(|hit| !early.shown.contains(&hit.path))
+            .take(query.limit)
+            .map(told)
+            .collect();
+        Last { hits, outdated }
     }
 
     fn read_log(&mut self) {
-        if !self.watcher.is_running() {
+        let stopped = match &self.watching {
+            Watching::CatchingUp => false,
+            Watching::Running(watcher) => !watcher.is_running(),
+        };
+        if stopped {
             self.lost = true;
         }
         let Ok(changes) = self.log.read_new() else {
@@ -295,6 +430,13 @@ impl Live {
             self.lost |= matches!(change, Change::Rescan { .. });
             self.overlay.apply(change);
         }
+    }
+}
+
+fn told(hit: nova_files_index::Hit) -> Hit {
+    Hit {
+        path: hit.path,
+        matched: matched(hit.kind),
     }
 }
 

@@ -67,7 +67,13 @@ impl Searcher {
         drop(
             self.shared
                 .built
-                .wait_while(state, |state| state.building)
+                .wait_while(state, |state| {
+                    state.building
+                        || state
+                            .live
+                            .as_ref()
+                            .is_some_and(|live| matches!(live.watching, Watching::CatchingUp))
+                })
                 .unwrap(),
         );
     }
@@ -86,12 +92,16 @@ fn a_newer_search_cancels_one_waiting_for_the_index() {
     let (sink, current) = &client;
     searcher.search((sink, current), SearchId(1), "report".to_owned(), LIMIT);
     searcher.search((sink, current), SearchId(2), "report".to_owned(), LIMIT);
-    let live = Live::start(&scratch.place(), &scratch.root.join("home"), false);
+    let (live, log) = Live::open(&scratch.place(), &scratch.root.join("home"), false).unwrap();
+    let index = Arc::clone(&live.index);
     let mut state = searcher.state();
-    state.live = live;
+    state.live = Some(live);
     state.building = false;
     searcher.shared.built.notify_all();
     drop(state);
+    searcher
+        .shared
+        .watch(&index, Watcher::start(&index, log, || {}).ok());
     let mut done = false;
     while !done {
         let Event::Found { id, done: last, .. } = events.recv_timeout(ANSWER_TIMEOUT).unwrap()
@@ -102,6 +112,90 @@ fn a_newer_search_cancels_one_waiting_for_the_index() {
         done = last;
     }
     assert!(events.recv_timeout(QUIET).is_err());
+}
+
+fn stages_around_catch_up(
+    change: impl FnOnce(&Path),
+    text: &str,
+    limit: u32,
+) -> (Vec<PathBuf>, Vec<PathBuf>) {
+    let scratch = Scratch::new("catch-up");
+    scratch.searcher().search_and_settle();
+    let home = scratch.root.join("home");
+    change(&home);
+    let (live, log) = Live::open(&scratch.place(), &home, false).unwrap();
+    let index = Arc::clone(&live.index);
+    let searcher = scratch.searcher();
+    searcher.state().live = Some(live);
+    let (client, events) = client();
+    let (sink, current) = &client;
+    searcher.search((sink, current), SearchId(1), text.to_owned(), limit);
+    let within_home = |hits: Vec<Hit>| -> Vec<PathBuf> {
+        hits.into_iter()
+            .map(|hit| hit.path.strip_prefix(&home).unwrap().to_owned())
+            .collect()
+    };
+    let Event::Found {
+        hits, done: false, ..
+    } = events.recv_timeout(ANSWER_TIMEOUT).unwrap()
+    else {
+        panic!("expected a first stage");
+    };
+    let first = within_home(hits);
+    assert!(events.recv_timeout(QUIET).is_err());
+    searcher
+        .shared
+        .watch(&index, Watcher::start(&index, log, || {}).ok());
+    let Event::Found {
+        hits, done: true, ..
+    } = events.recv_timeout(ANSWER_TIMEOUT).unwrap()
+    else {
+        panic!("expected a last stage");
+    };
+    assert!(events.recv_timeout(QUIET).is_err());
+    (first, within_home(hits))
+}
+
+fn paths(names: &[&str]) -> Vec<PathBuf> {
+    names.iter().map(PathBuf::from).collect()
+}
+
+#[test]
+fn a_search_before_the_catch_up_answers_at_once_and_ends_with_what_changed() {
+    let made = |home: &Path| fs::write(home.join("docs/report-late.pdf"), b"").unwrap();
+    let (first, last) = stages_around_catch_up(made, "report", LIMIT);
+    assert_eq!(first, paths(&["docs/report.pdf"]));
+    assert_eq!(last, paths(&["docs/report-late.pdf"]));
+}
+
+#[test]
+fn what_the_catch_up_found_comes_before_loose_matches_that_fill_the_last_stage() {
+    let made = |home: &Path| fs::write(home.join("docs/rprt.txt"), b"").unwrap();
+    let (_, unchanged) = stages_around_catch_up(|_| {}, "rprt", 1);
+    assert_eq!(unchanged, paths(&["docs/report.pdf"]));
+    let (_, changed) = stages_around_catch_up(made, "rprt", 1);
+    assert_eq!(changed, paths(&["docs/rprt.txt"]));
+}
+
+#[test]
+fn the_last_stage_leaves_out_what_the_catch_up_found_gone() {
+    let removed = |home: &Path| fs::remove_file(home.join("docs/report.pdf")).unwrap();
+    let (_, last) = stages_around_catch_up(removed, "rprt", LIMIT);
+    assert_eq!(last, paths(&[]));
+}
+
+#[test]
+fn a_watcher_that_cannot_start_leaves_no_index_and_fails_it() {
+    let scratch = Scratch::new("no-watcher");
+    scratch.searcher().search_and_settle();
+    let home = scratch.root.join("home");
+    let (live, _) = Live::open(&scratch.place(), &home, false).unwrap();
+    let index = Arc::clone(&live.index);
+    let searcher = scratch.searcher();
+    searcher.state().live = Some(live);
+    searcher.shared.watch(&index, None);
+    assert!(searcher.state().failed);
+    assert!(searcher.state().live.is_none());
 }
 
 #[test]
