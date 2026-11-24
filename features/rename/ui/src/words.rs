@@ -1,8 +1,17 @@
 use std::path::{Path, PathBuf};
 
 use nova_files_api::Tally;
-use nova_files_rename_api::{NewFolderJob, RenameJob};
+use nova_files_rename_api::{NewFileJob, NewFolderJob, RenameJob};
 use nova_files_shell::island::job_words::{Doing, Failed, JobWords};
+
+const MAKING: Doing = Doing {
+    verb: "Making",
+    after_items: "",
+};
+const MAKE_FAILED: Failed = Failed {
+    verb: "make",
+    names_item: true,
+};
 
 pub struct RenameWords;
 
@@ -34,10 +43,7 @@ pub struct NewFolderWords;
 
 impl JobWords<NewFolderJob> for NewFolderWords {
     fn doing(&self, _: &NewFolderJob) -> Doing {
-        Doing {
-            verb: "Making",
-            after_items: "",
-        }
+        MAKING
     }
 
     fn sources<'a>(&self, job: &'a NewFolderJob) -> &'a [PathBuf] {
@@ -49,10 +55,27 @@ impl JobWords<NewFolderJob> for NewFolderWords {
     }
 
     fn failed(&self, _: &NewFolderJob) -> Failed {
-        Failed {
-            verb: "make",
-            names_item: true,
-        }
+        MAKE_FAILED
+    }
+}
+
+pub struct NewFileWords;
+
+impl JobWords<NewFileJob> for NewFileWords {
+    fn doing(&self, _: &NewFileJob) -> Doing {
+        MAKING
+    }
+
+    fn sources<'a>(&self, job: &'a NewFileJob) -> &'a [PathBuf] {
+        std::slice::from_ref(&job.inside)
+    }
+
+    fn done(&self, _: &NewFileJob, _: Option<&Path>, _: Tally) -> Option<String> {
+        None
+    }
+
+    fn failed(&self, _: &NewFileJob) -> Failed {
+        MAKE_FAILED
     }
 }
 

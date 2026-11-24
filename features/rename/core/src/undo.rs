@@ -7,8 +7,8 @@ use nova_files_jobs::Ended;
 use nova_files_jobs::identity::{self, Identity, same};
 use nova_files_jobs::running::Running;
 use nova_files_jobs::stop::Stop;
-use nova_files_jobs::undo::gone;
-use nova_files_rename_api::{NewFolderJob, RenameJob};
+use nova_files_jobs::undo::{gone, trash_again};
+use nova_files_rename_api::{NewFileJob, NewFolderJob, RenameJob};
 
 use crate::rename;
 
@@ -16,6 +16,7 @@ use crate::rename;
 pub enum Undo {
     Rename(PathBuf, Identity, OsString),
     RemoveFolder(PathBuf, Identity),
+    TrashFile(PathBuf, Identity),
 }
 
 pub fn undo_of(operation: &Operation, outcome: &Outcome) -> Option<Undo> {
@@ -34,26 +35,37 @@ pub fn undo_of(operation: &Operation, outcome: &Outcome) -> Option<Undo> {
             path.file_name()?.to_os_string(),
         ));
     }
+    if let Some(NewFileJob { inside, name }) = operation.get::<NewFileJob>() {
+        let made = inside.join(name);
+        let entry = identity::of(&made)?;
+        return Some(Undo::TrashFile(made, entry));
+    }
     let NewFolderJob { inside, name } = operation.get::<NewFolderJob>()?;
     let made = inside.join(name);
     let entry = identity::of(&made)?;
     Some(Undo::RemoveFolder(made, entry))
 }
 
-pub fn run(running: &Running, undo: &Undo) -> Ended {
-    let (path, was) = match undo {
-        Undo::Rename(path, was, _) | Undo::RemoveFolder(path, was) => (path, *was),
-    };
+pub fn run(running: &mut Running, undo: &Undo) -> Ended {
+    match undo {
+        Undo::TrashFile(path, was) => trash_again(running, vec![(path.clone(), *was)]),
+        Undo::Rename(path, was, name) => if_same(running, (path, *was), || rename(path, name)),
+        Undo::RemoveFolder(path, was) => if_same(running, (path, *was), || remove_folder(path)),
+    }
+}
+
+fn if_same(
+    running: &Running,
+    (path, was): (&Path, Identity),
+    then: impl FnOnce() -> Ended,
+) -> Ended {
     if !same(path, was) {
         return gone();
     }
     if let Err(stop) = running.shared.control.checkpoint().map_err(Stop::from) {
         return (stop.outcome(), Vec::new());
     }
-    match undo {
-        Undo::Rename(_, _, name) => rename(path, name),
-        Undo::RemoveFolder(..) => remove_folder(path),
-    }
+    then()
 }
 
 fn remove_folder(path: &Path) -> Ended {

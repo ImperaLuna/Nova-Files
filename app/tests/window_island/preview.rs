@@ -20,9 +20,10 @@ async fn keys_while_previewing_change_nothing_behind_it(cx: &mut TestAppContext)
     cx.simulate_keystrokes("space");
     cx.run_until_parked();
     assert!(previewing(&view, cx));
-    cx.simulate_keystrokes("delete shift-delete f2 ctrl-z");
+    cx.simulate_keystrokes("delete shift-delete f2 ctrl-z ctrl-alt-n");
     cx.run_until_parked();
     assert!(tree.path().join("notes.txt").exists());
+    assert!(!tree.path().join("New file").exists());
     assert!(!view.read_with(cx, MainWindow::renaming));
     assert!(previewing(&view, cx));
     cx.simulate_keystrokes("escape");
