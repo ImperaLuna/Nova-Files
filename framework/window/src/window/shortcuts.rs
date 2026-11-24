@@ -4,7 +4,7 @@ use gpui::{App, AppContext as _, Context, Focusable as _, ScrollHandle, Window};
 use nova_files_shell::Parts;
 
 use super::MainWindow;
-use crate::commands::{ACTIONS, CommandSpec, SHORTCUTS};
+use crate::commands::{ACTIONS, BACK, CommandSpec, FORWARD, OPEN, SHORTCUTS, UP};
 use crate::shortcuts::{Picking, Shortcut, Shortcuts};
 use crate::text::{TextField, TextFieldEvent};
 
@@ -14,7 +14,7 @@ impl MainWindow {
     pub(crate) fn toggle_shortcuts(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         if self.shortcuts.is_some() {
             self.close_shortcuts(window, cx);
-        } else {
+        } else if !self.renaming(cx) {
             self.open_shortcuts(window, cx);
         }
     }
@@ -27,6 +27,7 @@ impl MainWindow {
             .into_iter()
             .map(|spec| {
                 let runs = window.is_action_available_in(&*spec.action(), &home)
+                    && self.window_allows(spec)
                     && self.parts.applies(spec, &scene, cx);
                 Shortcut::new(spec, runs)
             })
@@ -52,11 +53,29 @@ impl MainWindow {
         self.shortcuts = Some(Shortcuts {
             picking: Picking::new(list),
             field,
-            focus: cx.focus_handle(),
             scroll: ScrollHandle::new(),
             _typing: typing,
         });
         cx.notify();
+    }
+
+    fn window_allows(&self, spec: &CommandSpec) -> bool {
+        let allowed = [
+            (&BACK, self.history.back_target().is_some()),
+            (&FORWARD, self.history.forward_target().is_some()),
+            (&UP, self.parent().is_some()),
+            (&OPEN, self.selected_count() > 0),
+        ];
+        allowed
+            .into_iter()
+            .find(|(command, _)| *command == spec)
+            .is_none_or(|(_, allows)| allows)
+    }
+
+    pub(crate) fn focus_shortcut_field(&self, window: &mut Window, cx: &mut Context<Self>) {
+        if let Some(shortcuts) = self.shortcuts.as_ref() {
+            window.focus(&shortcuts.field.focus_handle(cx), cx);
+        }
     }
 
     pub(crate) fn close_shortcuts(&mut self, window: &mut Window, cx: &mut Context<Self>) {

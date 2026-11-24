@@ -1,3 +1,4 @@
+use gpui::point;
 use nova_files_window::Group;
 
 use super::*;
@@ -167,4 +168,71 @@ async fn every_command_has_a_group_of_its_own(cx: &mut TestAppContext) {
             .collect()
     });
     assert_eq!(homeless, Vec::<&str>::new());
+}
+
+#[gpui::test]
+async fn a_click_on_the_sheet_keeps_keys_in_the_sheet(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("shortcuts");
+    let home = TempFolder::tree("shortcuts-home");
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+
+    click(cx, "name-1");
+    cx.simulate_keystrokes("?");
+    cx.run_until_parked();
+    let card = cx.debug_bounds("shortcuts").unwrap();
+    cx.simulate_click(card.origin + point(px(4.0), px(4.0)), Modifiers::none());
+    cx.run_until_parked();
+    assert!(open(&view, cx));
+    cx.simulate_keystrokes("delete escape");
+    cx.run_until_parked();
+    assert!(!open(&view, cx));
+    assert_eq!(view.read_with(cx, |view, _| view.selected_count()), 1);
+    assert!(tree.path().join("notes.txt").exists());
+}
+
+#[gpui::test]
+async fn window_commands_with_nothing_to_act_on_are_dimmed(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("shortcuts");
+    let home = TempFolder::tree("shortcuts-home");
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+
+    cx.simulate_keystrokes("?");
+    cx.run_until_parked();
+    assert!(!runs(&view, cx, "go.back"));
+    assert!(!runs(&view, cx, "go.forward"));
+    assert!(!runs(&view, cx, "entry.open"));
+    assert!(runs(&view, cx, "go.up"));
+    cx.simulate_keystrokes("escape");
+
+    click(cx, "name-1");
+    cx.simulate_keystrokes("?");
+    cx.run_until_parked();
+    assert!(runs(&view, cx, "entry.open"));
+}
+
+#[gpui::test]
+async fn the_sheet_waits_for_a_rename_and_keeps_the_menu_shut(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("shortcuts");
+    let home = TempFolder::tree("shortcuts-home");
+    let (view, cx) = island_window(cx, tree.path(), &home).await;
+
+    click(cx, "name-1");
+    cx.simulate_keystrokes("f2");
+    cx.run_until_parked();
+    cx.simulate_input("rep");
+    cx.simulate_keystrokes("ctrl-shift-p");
+    cx.run_until_parked();
+    assert!(!open(&view, cx));
+    assert!(view.read_with(cx, MainWindow::renaming));
+    cx.simulate_keystrokes("escape");
+    cx.run_until_parked();
+    assert!(tree.path().join("notes.txt").exists());
+
+    cx.simulate_keystrokes("? shift-f10");
+    cx.run_until_parked();
+    assert!(open(&view, cx));
+    assert!(view.read_with(cx, |view, _| view.menu().is_none()));
 }

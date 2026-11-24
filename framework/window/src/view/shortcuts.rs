@@ -1,6 +1,6 @@
 use gpui::{
     AnyElement, BoxShadow, ClickEvent, Context, Div, Entity, Hsla, InteractiveElement as _,
-    IntoElement, MouseDownEvent, ParentElement as _, SharedString, Stateful,
+    IntoElement, MouseButton, MouseDownEvent, ParentElement as _, SharedString, Stateful,
     StatefulInteractiveElement as _, Styled, deferred, div, point, prelude::FluentBuilder as _, px,
 };
 
@@ -19,7 +19,6 @@ impl MainWindow {
         let Shortcuts {
             picking,
             field,
-            focus,
             scroll,
             ..
         } = self.shortcuts.as_ref()?;
@@ -36,8 +35,13 @@ impl MainWindow {
                     .justify_center()
                     .child(
                         card(&colors)
-                            .track_focus(focus)
                             .key_context(KEY_CONTEXT)
+                            .on_mouse_down(
+                                MouseButton::Left,
+                                cx.listener(|this, _: &MouseDownEvent, window, cx| {
+                                    this.focus_shortcut_field(window, cx);
+                                }),
+                            )
                             .on_action(cx.listener(|this, _: &ShortcutUp, _, cx| {
                                 this.step_shortcut(true, cx);
                             }))

@@ -1,4 +1,4 @@
-use gpui::{App, Entity, FocusHandle, KeyBinding, ScrollHandle, SharedString, Subscription};
+use gpui::{App, Entity, KeyBinding, ScrollHandle, SharedString, Subscription};
 
 use crate::commands::CommandSpec;
 use crate::menu::key_label;
@@ -94,7 +94,10 @@ impl Shortcut {
         if typed.is_empty() {
             return Some(Fit::Any);
         }
-        if self.keys.iter().any(|keys| keys.to_lowercase() == typed) {
+        let named = |keys: &&str| keys.replace('-', " ") == typed;
+        if self.keys.iter().any(|keys| keys.to_lowercase() == typed)
+            || self.spec.keys.iter().any(named)
+        {
             return Some(Fit::Keys);
         }
         let name = self.spec.label.to_lowercase();
@@ -214,7 +217,6 @@ impl Picking {
 pub struct Shortcuts {
     pub picking: Picking,
     pub field: Entity<TextField>,
-    pub focus: FocusHandle,
     pub scroll: ScrollHandle,
     pub(crate) _typing: Subscription,
 }
@@ -223,7 +225,8 @@ pub struct Shortcuts {
 mod tests {
     use super::*;
     use crate::commands::{
-        BACK, CLOSE_TAB, CURSOR_DOWN, FIND, PREVIEW_NEXT, RING_UP, SELECT_ALL, UP,
+        BACK, CLEAR_SELECTION, CLOSE_TAB, CURSOR_DOWN, CURSOR_PAGE_DOWN, FIND, PREVIEW_NEXT,
+        RING_UP, SELECT_ALL, UP,
     };
 
     fn list() -> Vec<Shortcut> {
@@ -269,6 +272,13 @@ mod tests {
         assert_eq!(names("ctrl a"), ["select.all"]);
         assert_eq!(names("Alt Left"), ["go.back"]);
         assert_eq!(names("backspace"), ["go.back"]);
+        let list = [
+            Shortcut::new(&CLEAR_SELECTION, true),
+            Shortcut::new(&CURSOR_PAGE_DOWN, true),
+        ];
+        for (typed, found) in [("escape", 0), ("esc", 0), ("pagedown", 1), ("pgdn", 1)] {
+            assert_eq!(shown(&list, typed), [found], "{typed}");
+        }
     }
 
     #[test]
