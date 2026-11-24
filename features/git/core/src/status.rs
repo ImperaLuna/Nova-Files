@@ -1,19 +1,13 @@
-use std::env;
 use std::io;
 use std::io::{BufRead as _, BufReader, Read};
-use std::os::unix::ffi::OsStrExt as _;
 use std::path::Path;
-use std::process::{Child, Command, Stdio};
-use std::sync::mpsc;
-use std::thread;
-use std::time::Duration;
 
 use nova_files_git_api::{Head, Repo};
 
+use crate::git::{GIT, git, read};
 use crate::git_dir::git_dir;
 use crate::repo_config::runs_programs;
 
-const GIT: &str = "git";
 const SAFE: [&str; 4] = [
     "-c",
     "core.fsmonitor=false",
@@ -28,9 +22,6 @@ const STATUS: [&str; 6] = [
     "--untracked-files=normal",
     "--ignore-submodules=all",
 ];
-const GIT_ENV: &[u8] = b"GIT_";
-const READ_WAIT: Duration = Duration::from_secs(10);
-const READER_THREAD: &str = "nova-files-git-read";
 const HEADER: &[u8] = b"# ";
 const OID: &str = "branch.oid ";
 const BRANCH: &str = "branch.head ";
@@ -60,44 +51,10 @@ pub fn repo_at(folder: &Path) -> Option<Repo> {
     }
 }
 
-fn git_command(folder: &Path) -> Command {
-    let mut command = Command::new(GIT);
-    for (name, _) in env::vars_os() {
-        if name.as_bytes().starts_with(GIT_ENV) {
-            command.env_remove(name);
-        }
-    }
-    command.args(SAFE).arg("-C").arg(folder).args(STATUS);
-    command
-}
-
 fn read_status(folder: &Path) -> io::Result<Option<Repo>> {
-    let mut child = git_command(folder)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()?;
-    let answer = read_output(&mut child);
-    end(&mut child)?;
-    answer
-}
-
-fn read_output(child: &mut Child) -> io::Result<Option<Repo>> {
-    let output = child.stdout.take().ok_or(io::ErrorKind::BrokenPipe)?;
-    let (done, read) = mpsc::channel();
-    thread::Builder::new()
-        .name(READER_THREAD.to_owned())
-        .spawn(move || {
-            done.send(parse(output)).ok();
-        })?;
-    read.recv_timeout(READ_WAIT)
-        .map_err(|_| io::ErrorKind::TimedOut.into())
-}
-
-fn end(child: &mut Child) -> io::Result<()> {
-    child.kill()?;
-    child.wait()?;
-    Ok(())
+    let mut command = git();
+    command.args(SAFE).arg("-C").arg(folder).args(STATUS);
+    read(command, parse)
 }
 
 pub fn parse(output: impl Read) -> Option<Repo> {

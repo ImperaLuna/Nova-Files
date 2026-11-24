@@ -1,8 +1,10 @@
 use std::collections::{BTreeSet, HashMap};
+use std::ffi::OsStr;
 use std::fs;
 use std::io;
 use std::mem::MaybeUninit;
 use std::os::fd::OwnedFd;
+use std::os::unix::ffi::OsStrExt as _;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -16,8 +18,9 @@ const QUIET: Duration = Duration::from_millis(150);
 const LONGEST_WAIT: Duration = Duration::from_secs(2);
 const READ_BUFFER: usize = 16_384;
 const WAKE: u64 = 1;
-const HEADS: &str = "refs/heads";
-const REMOTES: &str = "refs/remotes";
+const REFS: &str = "refs";
+const MOST_WATCHES: usize = 4096;
+const NEW: ReadFlags = ReadFlags::CREATE.union(ReadFlags::MOVED_TO);
 const CHANGES: WatchFlags = WatchFlags::CREATE
     .union(WatchFlags::DELETE)
     .union(WatchFlags::MOVED_FROM)
@@ -54,9 +57,15 @@ impl Stop {
     }
 }
 
+struct Watched {
+    index: usize,
+    dir: PathBuf,
+    in_refs: bool,
+}
+
 pub struct GitWatch {
     inotify: OwnedFd,
-    folders: HashMap<i32, usize>,
+    folders: HashMap<i32, Watched>,
 }
 
 impl GitWatch {
@@ -71,20 +80,42 @@ impl GitWatch {
         let Some(git_dir) = git_dir(folder) else {
             return;
         };
-        let refs = common_dir(&git_dir).unwrap_or_else(|| git_dir.clone());
-        let mut dirs = vec![git_dir, refs.join(HEADS)];
-        dirs.extend(remotes(&refs.join(REMOTES)));
-        for dir in dirs {
-            match inotify::add_watch(&self.inotify, &dir, CHANGES) {
-                Ok(wd) => {
-                    self.folders.insert(wd, index);
-                }
-                Err(error) => log::debug!("no git watch on {}: {error}", dir.display()),
+        let refs = common_dir(&git_dir)
+            .unwrap_or_else(|| git_dir.clone())
+            .join(REFS);
+        self.watch(index, git_dir, false);
+        self.watch_all(index, refs);
+    }
+
+    fn watch(&mut self, index: usize, dir: PathBuf, in_refs: bool) {
+        match inotify::add_watch(&self.inotify, &dir, CHANGES) {
+            Ok(wd) => {
+                self.folders.insert(
+                    wd,
+                    Watched {
+                        index,
+                        dir,
+                        in_refs,
+                    },
+                );
             }
+            Err(error) => log::debug!("no git watch on {}: {error}", dir.display()),
         }
     }
 
-    pub fn next(&self, stop: &Stop) -> io::Result<Option<Woke>> {
+    fn watch_all(&mut self, index: usize, top: PathBuf) {
+        let mut waiting = vec![top];
+        while let Some(dir) = waiting.pop() {
+            if self.folders.len() >= MOST_WATCHES {
+                log::warn!("git watches stop at {MOST_WATCHES} folders");
+                return;
+            }
+            waiting.extend(folders_in(&dir));
+            self.watch(index, dir, true);
+        }
+    }
+
+    pub fn next(&mut self, stop: &Stop) -> io::Result<Option<Woke>> {
         let mut buffer = vec![MaybeUninit::uninit(); READ_BUFFER];
         let mut woke: Option<Woke> = None;
         let mut first: Option<Instant> = None;
@@ -116,7 +147,8 @@ impl GitWatch {
         }
     }
 
-    fn read(&self, buffer: &mut [MaybeUninit<u8>], woke: &mut Option<Woke>) -> io::Result<()> {
+    fn read(&mut self, buffer: &mut [MaybeUninit<u8>], woke: &mut Option<Woke>) -> io::Result<()> {
+        let mut made = Vec::new();
         let mut reader = inotify::Reader::new(&self.inotify, buffer);
         loop {
             match reader.next() {
@@ -124,9 +156,16 @@ impl GitWatch {
                     *woke = Some(Woke::All);
                 }
                 Ok(event) => {
-                    let Some(&index) = self.folders.get(&event.wd()) else {
+                    let Some(watched) = self.folders.get(&event.wd()) else {
                         continue;
                     };
+                    let index = watched.index;
+                    let new_folder = watched.in_refs
+                        && event.events().contains(ReadFlags::ISDIR)
+                        && event.events().intersects(NEW);
+                    if let Some(name) = event.file_name().filter(|_| new_folder) {
+                        made.push((index, watched.dir.join(OsStr::from_bytes(name.to_bytes()))));
+                    }
                     match woke {
                         Some(Woke::All) => {}
                         Some(Woke::Folders(folders)) => {
@@ -135,15 +174,19 @@ impl GitWatch {
                         None => *woke = Some(Woke::Folders(BTreeSet::from([index]))),
                     }
                 }
-                Err(Errno::AGAIN) => return Ok(()),
+                Err(Errno::AGAIN) => break,
                 Err(Errno::INTR) => {}
                 Err(error) => return Err(error.into()),
             }
         }
+        for (index, dir) in made {
+            self.watch_all(index, dir);
+        }
+        Ok(())
     }
 }
 
-fn remotes(folder: &Path) -> Vec<PathBuf> {
+fn folders_in(folder: &Path) -> Vec<PathBuf> {
     match fs::read_dir(folder) {
         Ok(entries) => entries
             .filter_map(Result::ok)

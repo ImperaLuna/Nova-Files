@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+mod git;
 mod git_dir;
 mod repo_config;
 mod status;
@@ -68,7 +69,7 @@ fn follow(events: &Arc<dyn EventSink>, folders: &[PathBuf], stop: &Stop) {
     if !read_each(events, folders.iter(), stop) {
         return;
     }
-    let watch = match watch {
+    let mut watch = match watch {
         Ok(watch) => watch,
         Err(error) => {
             log::warn!("git state won't follow changes: {error}");

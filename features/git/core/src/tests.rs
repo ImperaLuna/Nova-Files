@@ -209,16 +209,60 @@ fn a_repo_whose_config_can_run_programs_is_not_read() {
 }
 
 #[test]
-fn config_that_names_a_program_is_found_in_any_spelling() {
-    use crate::repo_config::names_a_program;
-    assert!(!names_a_program(
-        "[core]\n\tbare = false\n[remote \"origin\"]\n\turl = x\n"
-    ));
-    assert!(names_a_program("[filter \"lfs\"]\n\tclean = x\n"));
-    assert!(names_a_program("[Filter.lfs]\nclean = x\n"));
-    assert!(names_a_program("[include]\npath = ../x\n"));
-    assert!(names_a_program("[includeIf \"gitdir:/x\"]\npath = y\n"));
-    assert!(names_a_program("[core]\n  FSMonitor=true\n"));
-    assert!(names_a_program("[core] attributesFile = x\n"));
-    assert!(!names_a_program("[user]\nfsmonitor = x\n"));
+fn config_that_names_a_program_is_found_however_it_is_written() {
+    let root = TestFolder::new("git-config-spellings");
+    let repo = root.join("repo");
+    committed(&repo);
+    let config = repo.join(".git").join("config");
+    let kept = fs::read(&config).unwrap();
+    let ran = root.join("ran");
+    fs::write(repo.join(".gitattributes"), "* filter=evil\n").unwrap();
+    let clean = format!("clean = touch {}; cat", ran.display());
+    let spellings = [
+        format!("\u{feff}[filter \"evil\"]\n\t{clean}\n"),
+        format!("[user] [filter \"evil\"] {clean}\n"),
+        format!("[Filter.evil]\n{clean}\n"),
+        "[include]\npath = ../x\n".to_owned(),
+        "[includeIf \"gitdir:/x\"]\npath = y\n".to_owned(),
+        "[core]\n  FSMonitor=true\n".to_owned(),
+    ];
+    for spelling in spellings {
+        let mut text = spelling.clone().into_bytes();
+        text.extend_from_slice(&kept);
+        fs::write(&config, &text).unwrap();
+        assert_eq!(repo_at(&repo), None, "{spelling:?}");
+        assert!(!ran.exists(), "{spelling:?}");
+    }
+    fs::write(&config, &kept).unwrap();
+    assert!(repo_at(&repo).is_some());
+}
+
+#[test]
+fn a_push_of_a_branch_with_a_slash_in_its_name_is_read_again() {
+    let root = TestFolder::new("git-push");
+    let upstream = root.join("upstream");
+    committed(&upstream);
+    let clone = root.join("clone");
+    let (from, to) = (upstream.to_string_lossy(), clone.to_string_lossy());
+    git(root.path(), &["clone", "--quiet", &from, &to]);
+    git(&clone, &["checkout", "--quiet", "-b", "feature/x"]);
+    let (reader, answers) = reading(vec![clone.clone()]);
+    let at = |ahead| Event::Repo {
+        folder: root.join("clone"),
+        repo: Some(Repo {
+            head: Head::Branch("feature/x".to_owned()),
+            changed: false,
+            ahead,
+            behind: 0,
+        }),
+    };
+    assert_eq!(answers.recv().unwrap(), at(0));
+    git(&clone, &["push", "--quiet", "-u", "origin", "feature/x"]);
+    fs::write(clone.join("a.txt"), "a").unwrap();
+    git(&clone, &["add", "a.txt"]);
+    git(&clone, &["commit", "--quiet", "-m", "a"]);
+    assert!(answers.iter().any(|event| event == at(1)));
+    git(&clone, &["push", "--quiet"]);
+    assert!(answers.iter().any(|event| event == at(0)));
+    reader.forget(ClientId(1));
 }
