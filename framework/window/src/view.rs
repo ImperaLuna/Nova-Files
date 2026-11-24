@@ -65,7 +65,7 @@ impl MainWindow {
         }
         self.focus_menu(window, cx);
         div()
-            .key_context(filtering::keys(self.filter().on()))
+            .key_context(filtering::keys(self.filtering()))
             .on_modifiers_changed(|_, window, cx| {
                 if cx.has_active_drag() {
                     window.refresh();

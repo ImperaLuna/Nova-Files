@@ -13,6 +13,10 @@ impl MainWindow {
         &self.filter
     }
 
+    pub(crate) fn filtering(&self) -> bool {
+        self.filter.on() && self.filters_here()
+    }
+
     pub(crate) fn filters_here(&self) -> bool {
         !self.picker()
             && !self.searching()
@@ -20,11 +24,7 @@ impl MainWindow {
     }
 
     pub(crate) fn filter_typed(&mut self, typed: &str) -> bool {
-        let total = self
-            .listing
-            .as_ref()
-            .map_or(0, |listing| listing.entries.len());
-        self.filter.typed(typed, total) && self.list_filtered()
+        self.filter.typed(typed) && self.list_filtered()
     }
 
     pub(crate) fn erase_filter_letter(&mut self, cx: &mut Context<Self>) {
@@ -54,6 +54,9 @@ impl MainWindow {
     }
 
     fn list_filtered(&mut self) -> bool {
+        if self.searching() {
+            return false;
+        }
         self.place_asked_last()
             .is_some_and(|place| self.request_place(&place))
     }

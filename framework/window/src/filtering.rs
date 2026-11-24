@@ -31,7 +31,6 @@ pub fn keys(filtering: bool) -> KeyContext {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Filter {
     pub text: String,
-    pub total: usize,
     pub moves_cursor: bool,
 }
 
@@ -40,12 +39,9 @@ impl Filter {
         !self.text.is_empty()
     }
 
-    pub fn typed(&mut self, typed: &str, total: usize) -> bool {
-        if !self.on() {
-            if typed.trim().is_empty() {
-                return false;
-            }
-            self.total = total;
+    pub fn typed(&mut self, typed: &str) -> bool {
+        if !self.on() && typed.trim().is_empty() {
+            return false;
         }
         self.text.push_str(typed);
         self.moves_cursor = true;
@@ -75,22 +71,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn typing_starts_with_a_letter_and_keeps_the_count_it_started_from() {
+    fn typing_starts_with_a_letter_and_then_takes_spaces() {
         let mut filter = Filter::default();
-        assert!(!filter.typed(" ", 9));
+        assert!(!filter.typed(" "));
         assert!(!filter.on());
-        assert!(filter.typed("p", 9));
-        assert!(filter.typed(" ", 4));
-        assert!(filter.typed("h", 4));
+        assert!(filter.typed("p"));
+        assert!(filter.typed(" "));
+        assert!(filter.typed("h"));
         assert_eq!(filter.text, "p h");
-        assert_eq!(filter.total, 9);
     }
 
     #[test]
     fn erasing_the_last_letter_turns_the_filter_off() {
         let mut filter = Filter::default();
-        filter.typed("a", 3);
-        filter.typed(" ", 3);
+        filter.typed("a");
+        filter.typed(" ");
         assert!(filter.erase_letter());
         assert_eq!(filter.text, "a");
         assert!(filter.erase_letter());
@@ -102,7 +97,7 @@ mod tests {
     fn clearing_says_whether_there_was_a_filter() {
         let mut filter = Filter::default();
         assert!(!filter.clear());
-        filter.typed("x", 1);
+        filter.typed("x");
         assert!(filter.clear());
         assert_eq!(filter, Filter::default());
     }

@@ -145,10 +145,11 @@ impl MainWindow {
                 };
                 let listing_id = listing.id;
                 let colors = Colors::of(cx);
-                let query = this.search.marks().map(str::to_owned).or_else(|| {
-                    let filter = this.filter();
-                    filter.on().then(|| filter.text.clone())
-                });
+                let query = this
+                    .search
+                    .marks()
+                    .map(str::to_owned)
+                    .or_else(|| this.filtering().then(|| this.filter().text.clone()));
                 let part_column = this.parts.column(&this.scene(cx), cx);
                 let widths = this.column_widths(cx);
                 let selected = |index: usize| {

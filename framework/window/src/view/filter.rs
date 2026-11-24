@@ -13,10 +13,10 @@ const CLEAR_SELECTOR: &str = "filter-clear";
 
 impl MainWindow {
     pub(super) fn filter_chip(&self, cx: &Context<Self>) -> Option<impl IntoElement> {
-        let filter = self.filter();
-        if !filter.on() {
+        if !self.filtering() {
             return None;
         }
+        let filter = self.filter();
         let colors = Colors::of(cx);
         let shown = self
             .listing
@@ -58,7 +58,7 @@ impl MainWindow {
                         .font_weight(text::STRONG_WEIGHT)
                         .child(filter.text.clone()),
                 )
-                .child(format!("{shown} of {}", filter.total))
+                .child(shown.to_string())
                 .child(clear),
         )
     }
