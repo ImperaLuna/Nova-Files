@@ -1,5 +1,6 @@
 use std::collections::{HashMap, HashSet};
 use std::ffi::{OsStr, OsString};
+use std::os::unix::ffi::{OsStrExt as _, OsStringExt as _};
 
 use nova_files_api::numbered::{Naming, numbered, stem};
 use nova_files_rename_api::is_plain_name;
@@ -14,6 +15,7 @@ pub enum Change {
     BeforeEnding(String),
     After { start: String, added: String },
     Swap { find: String, with: String },
+    Ending { from: String, to: String },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -34,83 +36,150 @@ pub struct Plan {
     pub clashes: bool,
 }
 
-fn stem_len(name: &str, is_folder: bool) -> usize {
-    if is_folder {
+fn split(name: &str, is_folder: bool) -> (&str, &str) {
+    let stem_end = if is_folder {
         name.len()
     } else {
         stem(OsStr::new(name)).len()
+    };
+    name.split_at(stem_end)
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Run {
+    Letters,
+    Digits,
+    Other,
+}
+
+fn run_of(character: char) -> Run {
+    if character.is_alphabetic() {
+        Run::Letters
+    } else if character.is_numeric() {
+        Run::Digits
+    } else {
+        Run::Other
     }
 }
 
-fn shared(original: &str, typed: &str) -> (usize, usize) {
-    let front: usize = original
-        .chars()
-        .zip(typed.chars())
-        .take_while(|(was, now)| was == now)
-        .map(|(was, _)| was.len_utf8())
-        .sum();
-    let back = original[front..]
-        .chars()
+fn words(text: &str) -> Vec<&str> {
+    let mut words = Vec::new();
+    let mut rest = text;
+    while let Some(first) = rest.chars().next() {
+        let run = run_of(first);
+        let end = rest
+            .char_indices()
+            .find(|(_, character)| run_of(*character) != run)
+            .map_or(rest.len(), |(at, _)| at);
+        let (word, after) = rest.split_at(end);
+        words.push(word);
+        rest = after;
+    }
+    words
+}
+
+fn stem_change(original: &str, typed: &str) -> Change {
+    let (was, now) = (words(original), words(typed));
+    let front = was.iter().zip(&now).take_while(|(a, b)| a == b).count();
+    let room = was.len().min(now.len()) - front;
+    let back = was
+        .iter()
         .rev()
-        .zip(typed[front..].chars().rev())
-        .take_while(|(was, now)| was == now)
-        .map(|(was, _)| was.len_utf8())
-        .sum();
-    (front, back)
+        .zip(now.iter().rev())
+        .take(room)
+        .take_while(|(a, b)| a == b)
+        .count();
+    if front == 0 && back == 0 {
+        return Change::Whole(typed.to_owned());
+    }
+    let gone = was[front..was.len() - back].concat();
+    let added = now[front..now.len() - back].concat();
+    if gone.is_empty() {
+        Change::After {
+            start: was[..front].concat(),
+            added,
+        }
+    } else {
+        Change::Swap {
+            find: gone,
+            with: added,
+        }
+    }
 }
 
 pub fn change(original: &str, typed: &str, is_folder: bool) -> Option<Change> {
     if original == typed {
         return None;
     }
-    let (front, back) = shared(original, typed);
-    let gone = &original[front..original.len() - back];
-    let added = &typed[front..typed.len() - back];
-    let stem_end = stem_len(original, is_folder);
-    let whole = front == 0 && !gone.is_empty() && original.len() - back >= stem_end;
-    Some(if whole {
-        Change::Whole(typed[..stem_len(typed, is_folder)].to_owned())
-    } else if !gone.is_empty() {
-        Change::Swap {
-            find: gone.to_owned(),
-            with: added.to_owned(),
-        }
-    } else if front == 0 {
-        Change::Front(added.to_owned())
-    } else if front == original.len() {
-        Change::End(added.to_owned())
-    } else if front == stem_end {
-        Change::BeforeEnding(added.to_owned())
-    } else {
-        Change::After {
-            start: original[..front].to_owned(),
-            added: added.to_owned(),
-        }
-    })
+    let (stem_was, ending_was) = split(original, is_folder);
+    let (stem_now, ending_now) = split(typed, is_folder);
+    if let Some(added) = typed.strip_suffix(original) {
+        return Some(Change::Front(added.to_owned()));
+    }
+    if let Some(added) = typed.strip_prefix(original) {
+        return Some(Change::End(added.to_owned()));
+    }
+    if stem_was == stem_now {
+        return Some(Change::Ending {
+            from: ending_was.to_owned(),
+            to: ending_now.to_owned(),
+        });
+    }
+    if ending_was != ending_now {
+        return Some(Change::Whole(stem_now.to_owned()));
+    }
+    if let Some(added) = stem_now.strip_prefix(stem_was) {
+        return Some(Change::BeforeEnding(added.to_owned()));
+    }
+    Some(stem_change(stem_was, stem_now))
 }
 
-pub fn changed(change: &Change, name: &str, is_folder: bool, number: u32) -> String {
-    let at = |at: usize, added: &str| format!("{}{added}{}", &name[..at], &name[at..]);
+fn swapped(text: &[u8], find: &[u8], with: &[u8]) -> Vec<u8> {
+    let mut swapped = Vec::new();
+    let mut rest = text;
+    while !rest.is_empty() {
+        if let Some(after) = rest.strip_prefix(find).filter(|_| !find.is_empty()) {
+            swapped.extend_from_slice(with);
+            rest = after;
+        } else {
+            let (kept, after) = rest.split_at(1);
+            swapped.extend_from_slice(kept);
+            rest = after;
+        }
+    }
+    swapped
+}
+
+pub fn changed(change: &Change, name: &OsStr, is_folder: bool, number: u32) -> OsString {
+    let bytes = name.as_bytes();
+    let stem_end = if is_folder {
+        bytes.len()
+    } else {
+        stem(name).len()
+    };
+    let (stem, ending) = bytes.split_at(stem_end);
+    let joined = |parts: &[&[u8]]| OsString::from_vec(parts.concat());
     match change {
         Change::Whole(new) => {
-            let first = format!("{new}{}", &name[stem_len(name, is_folder)..]);
             let naming = if is_folder {
                 Naming::Folder
             } else {
                 Naming::File
             };
-            numbered(OsStr::new(&first), number, naming)
-                .to_string_lossy()
-                .into_owned()
+            numbered(&joined(&[new.as_bytes(), ending]), number, naming)
         }
-        Change::Front(added) => at(0, added),
-        Change::End(added) => at(name.len(), added),
-        Change::BeforeEnding(added) => at(stem_len(name, is_folder), added),
-        Change::After { start, added } if name.starts_with(start.as_str()) => {
-            at(start.len(), added)
+        Change::Front(added) => joined(&[added.as_bytes(), bytes]),
+        Change::End(added) => joined(&[bytes, added.as_bytes()]),
+        Change::BeforeEnding(added) => joined(&[stem, added.as_bytes(), ending]),
+        Change::After { start, added } => stem.strip_prefix(start.as_bytes()).map_or_else(
+            || name.to_owned(),
+            |rest| joined(&[start.as_bytes(), added.as_bytes(), rest, ending]),
+        ),
+        Change::Swap { find, with } => {
+            joined(&[&swapped(stem, find.as_bytes(), with.as_bytes()), ending])
         }
-        Change::After { .. } => name.to_owned(),
-        Change::Swap { find, with } => name.replace(find.as_str(), with),
+        Change::Ending { from, to } if ending == from.as_bytes() => joined(&[stem, to.as_bytes()]),
+        Change::Ending { .. } => name.to_owned(),
     }
 }
 
@@ -129,15 +198,9 @@ pub fn plan(
         .iter()
         .zip(FIRST_NUMBER..)
         .map(|(other, number)| {
-            let shown = other.name.to_string_lossy();
             change.as_ref().map_or_else(
                 || other.name.to_owned(),
-                |change| {
-                    renamed(
-                        other.name,
-                        &changed(change, &shown, other.is_folder, number),
-                    )
-                },
+                |change| changed(change, other.name, other.is_folder, number),
             )
         })
         .collect();
@@ -267,7 +330,7 @@ mod tests {
     fn names_that_meet_or_are_taken_or_leave_the_folder_clash() {
         let same = planned("a1.txt", "a.txt", &["a11.txt"], &[]);
         let met = planned("x1", "y1", &["x2"], &["y2"]);
-        let emptied = planned("ab", "b", &["a"], &[]);
+        let emptied = planned("a1", "1", &["a"], &[]);
         let free = planned("x1", "y1", &["x2"], &["y3"]);
 
         assert!(same.clashes);
@@ -289,5 +352,66 @@ mod tests {
         let plan = planned("café 1.txt", "caffè 1.txt", &others, &[]);
 
         assert_eq!(names(&plan, &others), ["caffè 2.txt"]);
+    }
+
+    #[test]
+    fn text_added_in_front_counts_even_when_it_starts_like_the_name() {
+        let others = ["plan.md"];
+        let plan = planned("notes.txt", "new notes.txt", &others, &[]);
+
+        assert_eq!(names(&plan, &others), ["new plan.md"]);
+    }
+
+    #[test]
+    fn text_added_before_the_ending_may_start_with_a_dot() {
+        let others = ["plan.md"];
+        let plan = planned("notes.txt", "notes.old.txt", &others, &[]);
+
+        assert_eq!(names(&plan, &others), ["plan.old.md"]);
+    }
+
+    #[test]
+    fn a_new_name_that_shares_letters_with_the_old_one_is_still_whole() {
+        let others = ["beach.jpg"];
+
+        let italy = planned("holiday.jpg", "Italy.jpg", &others, &[]);
+        let resume = planned("report.jpg", "resume.jpg", &others, &[]);
+
+        assert_eq!(names(&italy, &others), ["Italy (2).jpg"]);
+        assert_eq!(names(&resume, &others), ["resume (2).jpg"]);
+    }
+
+    #[test]
+    fn a_changed_word_changes_as_a_word_and_never_in_the_ending() {
+        let years = ["IMG_2023_0413.jpg", "IMG_2023_3333.jpg"];
+        let year = planned("IMG_2023_0412.jpg", "IMG_2024_0412.jpg", &years, &[]);
+        let endings = ["txt notes.txt"];
+        let word = planned("txt list.txt", "text list.txt", &endings, &[]);
+
+        assert_eq!(
+            names(&year, &years),
+            ["IMG_2024_0413.jpg", "IMG_2024_3333.jpg"]
+        );
+        assert_eq!(names(&word, &endings), ["text notes.txt"]);
+    }
+
+    #[test]
+    fn a_changed_ending_changes_only_the_same_ending() {
+        let others = ["b.jpeg", "c.png"];
+        let plan = planned("a.jpeg", "a.jpg", &others, &[]);
+
+        assert_eq!(names(&plan, &others), ["b.jpg", "c.png"]);
+    }
+
+    #[test]
+    fn bytes_that_are_not_text_stay_as_they_were() {
+        let odd = OsStr::from_bytes(b"a\xFFa 1");
+        let others = [Named {
+            name: odd,
+            is_folder: false,
+        }];
+        let plan = plan(file("a 1"), "b 1", &others, &HashSet::new());
+
+        assert_eq!(plan.others[odd].name, OsStr::from_bytes(b"b\xFFb 1"));
     }
 }

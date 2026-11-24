@@ -35,19 +35,30 @@ pub fn rename_many(paths: &[PathBuf], names: &[OsString]) -> Ended {
             let stuck = rest
                 .first()
                 .map_or_else(|| Path::new(""), |step| step.from.as_path());
-            take_back(done);
-            return failed(stuck, Failure::NameTaken);
+            return taken_back(done, folders, stuck, Failure::NameTaken);
         }
         waiting = rest;
         for step in ready {
             if let Err(error) = rename_no_replace(&step.from, &step.to) {
-                take_back(done);
-                return failed(&step.from, failure(&error));
+                return taken_back(done, folders, &step.from, failure(&error));
             }
             done.push(step);
         }
     }
     (Outcome::Done, folders)
+}
+
+fn taken_back(done: Vec<Step>, folders: Vec<PathBuf>, path: &Path, reason: Failure) -> Ended {
+    for step in done.into_iter().rev() {
+        if let Err(error) = rename_no_replace(&step.to, &step.from) {
+            let outcome = Outcome::Failed {
+                path: step.to,
+                reason: failure(&error),
+            };
+            return (outcome, folders);
+        }
+    }
+    failed(path, reason)
 }
 
 fn steps<'a>(paths: &'a [PathBuf], names: &[OsString]) -> Result<Vec<Step>, &'a Path> {
@@ -82,12 +93,6 @@ fn folders_of(steps: &[Step]) -> Vec<PathBuf> {
     folders.sort();
     folders.dedup();
     folders
-}
-
-fn take_back(done: Vec<Step>) {
-    for step in done.into_iter().rev() {
-        rename_no_replace(&step.to, &step.from).ok();
-    }
 }
 
 pub fn renamed(job: &RenameManyJob) -> Option<Renamed> {
@@ -195,6 +200,25 @@ mod tests {
             fs::read_to_string(folder.path().join("kept")).unwrap(),
             "kept"
         );
+    }
+
+    #[test]
+    fn a_file_that_cannot_go_back_is_named_with_its_folder() {
+        let folder = TestFolder::new("many-stuck");
+        folder.file("a", "a");
+        let steps = vec![Step {
+            from: folder.path().join("a"),
+            to: folder.path().join("gone"),
+        }];
+        let folders = vec![folder.path().to_path_buf()];
+
+        let ended = taken_back(steps, folders.clone(), Path::new("/x"), Failure::NameTaken);
+
+        let failed = Outcome::Failed {
+            path: folder.path().join("gone"),
+            reason: Failure::NotFound,
+        };
+        assert_eq!(ended, (failed, folders));
     }
 
     #[test]
