@@ -172,6 +172,7 @@ fn shown_with_details(
         first: EntryId(0),
         details: (0..with_details).map(|_| sized(1)).collect(),
         icons: Arc::new([]),
+        kinds: Arc::new([]),
     });
     cx.run_until_parked();
     (view, cx, core, id)
@@ -286,6 +287,7 @@ fn details_for_another_listing_are_left_out(cx: &mut TestAppContext) {
         first: EntryId(1),
         details: Arc::new([sized(5)]),
         icons: Arc::new([]),
+        kinds: Arc::new([]),
     });
     cx.run_until_parked();
 
@@ -301,12 +303,33 @@ fn details_after_a_gap_fill_their_own_rows(cx: &mut TestAppContext) {
         first: EntryId(2),
         details: Arc::new([sized(5)]),
         icons: Arc::new([]),
+        kinds: Arc::new([]),
     });
     cx.run_until_parked();
 
     view.read_with(cx, |view, _| {
         assert_eq!(view.columns(1).unwrap().size, "");
         assert_eq!(view.columns(2).unwrap().size, "5 B");
+    });
+}
+
+#[gpui::test]
+fn each_file_shows_the_name_the_core_gives_its_type(cx: &mut TestAppContext) {
+    let (view, cx, core, id) = shown_with_details(cx, 0);
+
+    core.send(Event::DetailsRead {
+        id,
+        first: EntryId(0),
+        details: Arc::new([sized(1), sized(2)]),
+        icons: Arc::new([]),
+        kinds: Arc::new([Some(Arc::from("PDF document")), None]),
+    });
+    cx.run_until_parked();
+
+    view.read_with(cx, |view, _| {
+        assert_eq!(view.columns(0).unwrap().kind, "PDF document");
+        assert_eq!(view.columns(1).unwrap().kind, "");
+        assert_eq!(view.columns(2).unwrap().kind, "");
     });
 }
 
@@ -665,7 +688,10 @@ fn a_thumbnail_shrunk_after_hiding_is_not_kept(cx: &mut TestAppContext) {
 fn listing_asked(core: &mut Core) -> (ListingId, PathBuf, Order) {
     let mut asked = Vec::new();
     while let Some(message) = core.try_recv() {
-        if let Some(Command::ListFolder { id, path, order }) = message.into_command::<Command>() {
+        if let Some(Command::ListFolder {
+            id, path, order, ..
+        }) = message.into_command::<Command>()
+        {
             asked.push((id, path, order));
         }
     }

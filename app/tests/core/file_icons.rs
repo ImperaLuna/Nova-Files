@@ -147,3 +147,31 @@ fn without_a_theme_icon_a_file_shows_its_kind() {
         FileIcon::BuiltIn(IconKind::File)
     );
 }
+
+#[test]
+fn a_file_is_named_by_its_types_comment_and_a_folder_or_unknown_file_by_nothing() {
+    let data = Data::new("kind-name");
+    let path = data.0.join("mime/image/png.xml");
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    fs::write(
+        path,
+        b"<mime-type type=\"image/png\"><comment>PNG image</comment></mime-type>",
+    )
+    .unwrap();
+    let icons = data.icons();
+
+    let named = icons.kind_name(OsStr::new("a.png"), EntryKind::File);
+    let again = icons.kind_name(OsStr::new("b.PNG"), EntryKind::File);
+
+    assert_eq!(named.as_deref(), Some("PNG image"));
+    assert!(matches!((&named, &again), (Some(a), Some(b)) if Arc::ptr_eq(a, b)));
+    assert_eq!(
+        icons.kind_name(OsStr::new("a.png"), EntryKind::Folder),
+        None
+    );
+    assert_eq!(
+        icons.kind_name(OsStr::new("notes.txt"), EntryKind::File),
+        None
+    );
+    assert_eq!(icons.kind_name(OsStr::new("plain"), EntryKind::File), None);
+}

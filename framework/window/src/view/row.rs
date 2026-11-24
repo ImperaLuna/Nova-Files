@@ -36,6 +36,7 @@ impl Corners {
 pub struct ColumnWidths {
     pub part: Pixels,
     pub folder: Pixels,
+    pub kind: Pixels,
     pub modified: Pixels,
     pub size: Pixels,
 }
@@ -49,7 +50,7 @@ pub struct Middle {
 pub fn cells(
     name: impl IntoElement,
     middle: Middle,
-    modified: impl IntoElement,
+    (kind, modified): (impl IntoElement, impl IntoElement),
     (size_cell, widths): (impl IntoElement, ColumnWidths),
     modified_selector: String,
 ) -> impl IntoElement {
@@ -77,6 +78,7 @@ pub fn cells(
                 .folder
                 .map(|folder| column(widths.folder).child(folder)),
         )
+        .child(column(widths.kind).child(kind))
         .child(
             column(widths.modified)
                 .debug_selector(|| modified_selector)

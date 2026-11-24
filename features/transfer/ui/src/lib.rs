@@ -6,15 +6,40 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use gpui::{App, Context, Modifiers, SharedString};
-use nova_files_shell::{Allow, DropOver, Host, Location, Part, Slots};
+use gpui::{App, Context, Modifiers, SharedString, Window};
+use nova_files_shell::assets::Icon;
+use nova_files_shell::{
+    Allow, DropOver, Host, Location, MenuAt, MenuGroup, MenuItem, Part, Placed, Scene, Slots,
+    command_spec,
+};
 use nova_files_transfer_api::{
-    Command, CopyJob, DropAskId, DropKind, Event, MoveJob, copy, move_into,
+    Command, CopyJob, DropAskId, DropKind, Event, LinkJob, MoveJob, copy, link, move_into,
 };
 
-use crate::words::{CopyWords, MoveWords};
+use crate::words::{CopyWords, LinkWords, MoveWords};
+
+pub use nova_files_shell::actions::{Duplicate, MakeLink};
+
+command_spec!(
+    DUPLICATE,
+    Duplicate,
+    "file.duplicate",
+    "Duplicate",
+    ["ctrl-d"],
+    needs[TakeOut, Change]
+);
+
+command_spec!(
+    MAKE_LINK,
+    MakeLink,
+    "file.make-link",
+    "Make link",
+    ["ctrl-m"],
+    needs[Change]
+);
 
 pub const MOVE_TO: &str = "Move to";
+pub const LINK_IN: &str = "Link in";
 pub const COPY_TO: &str = "Copy to";
 const ITEMS: &str = "items";
 const ROOT: &str = "/";
@@ -131,10 +156,29 @@ impl TransferPart {
         let operation = match kind {
             DropKind::Copy => copy(sources, into),
             DropKind::Move => move_into(sources, into),
+            DropKind::Link => link(sources, into),
         };
         self.host
             .island
             .update(cx, |island, cx| island.start_job(operation, cx));
+    }
+
+    fn duplicate(&mut self, _: &Duplicate, _: &mut Window, cx: &mut Context<Self>) {
+        let paths = self.host.entries.read(cx).selected_paths();
+        for (into, sources) in by_folder(paths) {
+            if self.takes_into(&into) {
+                self.start(DropKind::Copy, sources, into, cx);
+            }
+        }
+    }
+
+    fn make_link(&mut self, _: &MakeLink, _: &mut Window, cx: &mut Context<Self>) {
+        let paths = self.host.entries.read(cx).selected_paths();
+        for (into, sources) in by_folder(paths) {
+            if self.takes_into(&into) {
+                self.start(DropKind::Link, sources, into, cx);
+            }
+        }
     }
 
     fn answered(&mut self, Event::DropWould { id, kind }: Event, cx: &mut Context<Self>) {
@@ -150,8 +194,38 @@ impl TransferPart {
     }
 }
 
+fn by_folder(paths: Vec<PathBuf>) -> Vec<(PathBuf, Vec<PathBuf>)> {
+    let mut groups: Vec<(PathBuf, Vec<PathBuf>)> = Vec::new();
+    for path in paths {
+        let Some(folder) = path.parent().map(Path::to_path_buf) else {
+            continue;
+        };
+        match groups.iter_mut().find(|(into, _)| *into == folder) {
+            Some((_, sources)) => sources.push(path),
+            None => groups.push((folder, vec![path])),
+        }
+    }
+    groups
+}
+
+const fn not_picking(_: &TransferPart, scene: &Scene, _: &App) -> bool {
+    !scene.picker
+}
+
+fn duplicate_item(_: &TransferPart, scene: &Scene, _: &App) -> Vec<MenuItem> {
+    if scene.picker {
+        return Vec::new();
+    }
+    vec![
+        MenuItem::run(Icon::Duplicate, &DUPLICATE),
+        MenuItem::run(Icon::Link, &MAKE_LINK),
+    ]
+}
+
 const fn picked(modifiers: Modifiers) -> Option<DropKind> {
-    if modifiers.control {
+    if modifiers.control && modifiers.shift {
+        Some(DropKind::Link)
+    } else if modifiers.control {
         Some(DropKind::Copy)
     } else if modifiers.shift {
         Some(DropKind::Move)
@@ -164,6 +238,7 @@ fn label(kind: DropKind, name: &str) -> String {
     let verb = match kind {
         DropKind::Move => MOVE_TO,
         DropKind::Copy => COPY_TO,
+        DropKind::Link => LINK_IN,
     };
     format!("{verb} {name}")
 }
@@ -189,6 +264,15 @@ impl Part for TransferPart {
 
     fn slots(slots: &mut Slots<Self>) {
         slots.drop_target(Self::aim, Self::take);
+        slots.command(&DUPLICATE, not_picking, Self::duplicate);
+        slots.command(&MAKE_LINK, not_picking, Self::make_link);
+        slots.job_words::<LinkJob>(LinkWords);
+        slots.menu_in(
+            MenuAt::Entry,
+            MenuGroup::Edit,
+            Placed::SECOND,
+            duplicate_item,
+        );
         slots.on_event(Self::answered);
         slots.sends::<Command>();
         slots.job_words::<CopyJob>(CopyWords);

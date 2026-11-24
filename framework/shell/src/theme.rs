@@ -32,6 +32,21 @@ pub struct Colors {
     pub drop_edge: Rgba,
     pub changed: Rgba,
     pub tags: Tags,
+    pub code: Code,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Code {
+    pub plain: Rgba,
+    pub comment: Rgba,
+    pub keyword: Rgba,
+    pub quoted: Rgba,
+    pub number: Rgba,
+    pub function: Rgba,
+    pub kind: Rgba,
+    pub tag: Rgba,
+    pub attribute: Rgba,
+    pub line_number: Rgba,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -65,6 +80,8 @@ mod share {
     pub const MARK: f32 = 0.34;
     pub const DROP: f32 = 0.16;
     pub const SCRIM: f32 = 0.72;
+    pub const CODE_KIND: f32 = 0.55;
+    pub const CODE_COMMENT: f32 = 0.48;
 }
 
 impl Colors {
@@ -110,6 +127,18 @@ impl Colors {
             drop_edge: color(palette.primary),
             changed: color(palette.warning),
             tags: Tags::new(palette, text_dim),
+            code: Code {
+                plain: into_bg(palette.fg, share::SOFT),
+                comment: into_bg(palette.fg, share::CODE_COMMENT),
+                keyword: color(palette.secondary),
+                quoted: color(palette.success),
+                number: color(palette.warning),
+                function: color(palette.info),
+                kind: mix(color(palette.info), share::CODE_KIND, color(palette.fg)),
+                tag: color(palette.error),
+                attribute: mix(color(palette.warning), share::CODE_KIND, color(palette.fg)),
+                line_number: into_bg(palette.fg, share::FAINT),
+            },
         }
     }
 
@@ -226,6 +255,7 @@ pub mod size {
         px(256.0),
     ];
     pub const MODIFIED_WIDTH: Pixels = px(150.0);
+    pub const KIND_WIDTH: Pixels = px(140.0);
     pub const SIZE_WIDTH: Pixels = px(92.0);
     pub const HEAD_HEIGHT: Pixels = px(38.0);
     pub const HEAD_TOP: Pixels = px(4.0);
@@ -345,6 +375,8 @@ pub mod size {
     pub const COUNT_BOTTOM: Pixels = px(12.0);
     pub const COUNT_PAD_X: Pixels = px(8.0);
     pub const COUNT_PAD_Y: Pixels = px(3.0);
+    pub const FILTER_CLEAR: Pixels = px(20.0);
+    pub const FILTER_CLEAR_ICON: Pixels = px(14.0);
     pub const MENU_ICON: Pixels = px(16.0);
     pub const SECTION_BUTTON: Pixels = px(24.0);
     pub const SECTION_BUTTON_ICON: Pixels = px(15.0);

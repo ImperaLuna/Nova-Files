@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use nova_files_api::{Command, FolderSizes, HiddenFiles};
 use nova_files_archives_core::inside::Inside;
-use nova_files_entries_core::{InnerFolders, RowPictures, list_folder};
+use nova_files_entries_core::{InnerFolders, RowPictures, Shown, list_folder};
 use nova_files_settings_api::Thumbnails;
 
 use super::Setup;
@@ -13,12 +13,22 @@ use nova_files_trash_core::Trashes;
 
 pub(super) fn answer(client: &Client, command: Command, setup: &Setup) {
     match command {
-        Command::ListFolder { id, path, order } => {
+        Command::ListFolder {
+            id,
+            path,
+            order,
+            filter,
+        } => {
             let hidden = hidden_files(setup, &path);
             let inner: Arc<dyn InnerFolders> = Arc::<Inside>::clone(&setup.inside);
             let measured = setup.settings.current().folder_sizes == FolderSizes::Measured;
             let sizer = measured.then_some(&setup.folder_sizer);
-            list_folder(client.entries(), (id, path), (order, hidden), &inner, sizer);
+            let shown = Shown {
+                order,
+                hidden,
+                filter,
+            };
+            list_folder(client.entries(), (id, path), shown, &inner, sizer);
         }
         Command::Rows {
             id,

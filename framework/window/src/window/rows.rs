@@ -11,9 +11,12 @@ use crate::view::{RowIcon, entry_kind};
 use nova_files_shell::Grid;
 use nova_files_shell::device::device_side;
 
+const FOLDER_KIND: &str = "Folder";
+
 pub struct RowRead {
     pub details: Details,
     pub icon: FileIcon,
+    pub kind: Option<Arc<str>>,
 }
 
 impl MainWindow {
@@ -25,7 +28,17 @@ impl MainWindow {
             .details
             .get(&index)
             .and_then(|read| read.details.modified);
+        let kind = if self.listing.as_ref()?.entries.get(index)?.kind == EntryKind::Folder {
+            FOLDER_KIND.to_owned()
+        } else {
+            self.details
+                .get(&index)
+                .and_then(|read| read.kind.as_deref())
+                .unwrap_or_default()
+                .to_owned()
+        };
         Some(ColumnText {
+            kind,
             modified: modified.map(columns::modified).unwrap_or_default(),
             size: self
                 .size_of_row(index)
@@ -55,7 +68,7 @@ impl MainWindow {
         &mut self,
         first: EntryId,
         details: &[Details],
-        icons: &[FileIcon],
+        (icons, kinds): (&[FileIcon], &[Option<Arc<str>>]),
         cx: &mut Context<Self>,
     ) {
         let Some(listing) = &self.listing else { return };
@@ -75,6 +88,7 @@ impl MainWindow {
                 let read = RowRead {
                     details: *details,
                     icon,
+                    kind: kinds.get(at).cloned().flatten(),
                 };
                 (first + at, read)
             });

@@ -32,6 +32,7 @@ pub enum Resizable {
     Sidebar,
     Part,
     Folder,
+    Kind,
     Modified,
     Size,
 }
@@ -42,6 +43,7 @@ impl Resizable {
             Self::Sidebar => "sidebar",
             Self::Part => "part",
             Self::Folder => "folder",
+            Self::Kind => "type",
             Self::Modified => "modified",
             Self::Size => "size",
         }

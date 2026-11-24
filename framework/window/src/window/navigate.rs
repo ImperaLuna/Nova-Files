@@ -13,8 +13,9 @@ impl MainWindow {
         self.request(folder);
     }
 
-    pub(super) const fn went_elsewhere(&mut self) {
+    pub(super) fn went_elsewhere(&mut self) {
         self.went = Went::Elsewhere;
+        self.drop_filter();
     }
 
     pub fn go_back(&mut self, cx: &mut Context<Self>) {
@@ -70,7 +71,13 @@ impl MainWindow {
     pub(super) fn request(&mut self, folder: &Path) -> bool {
         let path = tidy(folder);
         let place = Location::Folder(path.clone());
-        self.ask_listing(place, |id, order| Command::ListFolder { id, path, order })
+        let filter = self.filter().text.clone();
+        self.ask_listing(place, |id, order| Command::ListFolder {
+            id,
+            path,
+            order,
+            filter,
+        })
     }
 
     pub(super) fn ask_listing<M: Message>(
@@ -156,7 +163,7 @@ fn next_order(current: Order, key: SortKey) -> Order {
     let descending = if current.key == key {
         !current.descending
     } else {
-        key != SortKey::Name
+        !matches!(key, SortKey::Name | SortKey::Kind)
     };
     Order { key, descending }
 }
@@ -204,7 +211,7 @@ mod tests {
     }
 
     #[test]
-    fn a_new_column_starts_a_to_z_by_name_and_largest_or_newest_first_otherwise() {
+    fn a_new_column_starts_a_to_z_by_name_or_type_and_largest_or_newest_first_otherwise() {
         let by_size = next_order(Order::default(), SortKey::Size);
         assert_eq!(
             by_size,
@@ -216,6 +223,14 @@ mod tests {
         let by_modified = next_order(by_size, SortKey::Modified);
         assert!(by_modified.descending);
         assert_eq!(next_order(by_modified, SortKey::Name), Order::default());
+        let by_kind = next_order(by_modified, SortKey::Kind);
+        assert_eq!(
+            by_kind,
+            Order {
+                key: SortKey::Kind,
+                descending: false
+            }
+        );
     }
 
     #[test]

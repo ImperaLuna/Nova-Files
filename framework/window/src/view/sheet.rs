@@ -15,7 +15,7 @@ use super::row::{
     folder_aim, icon, share_cell,
 };
 
-use nova_files_shell::{Allow, PageRef, Resizable};
+use nova_files_shell::{Allow, PageRef, Resizable, ShownColumn};
 
 use crate::assets::Icon;
 use crate::marks;
@@ -24,6 +24,7 @@ use crate::window::{Aim, MainWindow};
 use nova_files_shell::Grid;
 
 const NAME_LABEL: &str = "Name";
+const KIND_LABEL: &str = "Type";
 const MODIFIED_LABEL: &str = "Modified";
 const SIZE_LABEL: &str = "Size";
 const FOLDER_LABEL: &str = "Folder";
@@ -61,6 +62,7 @@ impl MainWindow {
                         })
                         .child(self.entries_area(entries, cx))
                         .child(self.island(cx))
+                        .children(self.filter_chip(cx))
                 }
             })
     }
@@ -143,7 +145,11 @@ impl MainWindow {
                 };
                 let listing_id = listing.id;
                 let colors = Colors::of(cx);
-                let query = this.search.marks().map(str::to_owned);
+                let query = this
+                    .search
+                    .marks()
+                    .map(str::to_owned)
+                    .or_else(|| this.filtering().then(|| this.filter().text.clone()));
                 let part_column = this.parts.column(&this.scene(cx), cx);
                 let widths = this.column_widths(cx);
                 let selected = |index: usize| {
@@ -166,21 +172,17 @@ impl MainWindow {
                             .as_deref()
                             .map(|query| marks::matched(&name, query))
                             .unwrap_or_default();
-                        let middle = Middle {
-                            part: part_column.as_ref().map(|column| {
-                                column
-                                    .cell(entry, cx)
-                                    .unwrap_or_else(|| div().into_any_element())
-                            }),
-                            folder: this.folder_cell(listing, (entry, index), cx),
-                        };
+                        let middle = this.middle(part_column.as_ref(), listing, (entry, index), cx);
                         let on = selected(index);
                         let corners = Corners::of(index, selected);
                         let folder_at = folder_aim(listing, entry, &name);
                         let line = cells(
                             this.name_cell(entry, ((listing_id, id), index), (name, marks), cx),
                             middle,
-                            detail(columns.modified, &colors),
+                            (
+                                detail(columns.kind, &colors),
+                                detail(columns.modified, &colors),
+                            ),
                             (this.size_cell(index, columns.size, &colors), widths),
                             format!("modified-{index}"),
                         );
@@ -388,6 +390,23 @@ impl MainWindow {
         Some(&self.listing.as_ref()?.path)
     }
 
+    fn middle(
+        &self,
+        part_column: Option<&ShownColumn>,
+        listing: &Listing,
+        (entry, index): (&Entry, usize),
+        cx: &Context<Self>,
+    ) -> Middle {
+        Middle {
+            part: part_column.map(|column| {
+                column
+                    .cell(entry, cx)
+                    .unwrap_or_else(|| div().into_any_element())
+            }),
+            folder: self.folder_cell(listing, (entry, index), cx),
+        }
+    }
+
     fn folder_cell(
         &self,
         listing: &Listing,
@@ -430,6 +449,7 @@ impl MainWindow {
         ColumnWidths {
             part: self.width_of(Resizable::Part, cx),
             folder: self.width_of(Resizable::Folder, cx),
+            kind: self.width_of(Resizable::Kind, cx),
             modified: self.width_of(Resizable::Modified, cx),
             size: self.width_of(Resizable::Size, cx),
         }
@@ -444,11 +464,13 @@ impl MainWindow {
         let half = (size::COLUMN_GAP - size::GRIP_REACH) * GRIP_CENTRE;
         let size_left = size::ROW_PAD + widths.size + half;
         let modified_left = size_left + size::COLUMN_GAP + widths.modified;
+        let kind_left = modified_left + size::COLUMN_GAP + widths.kind;
         let mut grips = vec![
             self.grip(Resizable::Size, cx).right(size_left),
             self.grip(Resizable::Modified, cx).right(modified_left),
+            self.grip(Resizable::Kind, cx).right(kind_left),
         ];
-        let mut left = modified_left;
+        let mut left = kind_left;
         let middle = [
             (folder, Resizable::Folder, widths.folder),
             (part, Resizable::Part, widths.part),
@@ -502,7 +524,10 @@ fn column_heads(
                 .child(cells(
                     div().flex().child(head(SortKey::Name, NAME_LABEL)),
                     middle,
-                    head(SortKey::Modified, MODIFIED_LABEL),
+                    (
+                        head(SortKey::Kind, KIND_LABEL),
+                        head(SortKey::Modified, MODIFIED_LABEL),
+                    ),
                     (
                         head(SortKey::Size, SIZE_LABEL)
                             .justify_end()

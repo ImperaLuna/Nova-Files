@@ -5,6 +5,7 @@ mod context_menu;
 mod drag_pile;
 mod dragging;
 mod events;
+mod filter;
 mod gallery;
 mod hidden;
 mod hover_open;
@@ -16,6 +17,7 @@ mod renaming;
 mod rows;
 mod search;
 mod shares;
+mod shortcuts;
 mod showing;
 mod slots;
 mod start;
@@ -56,6 +58,7 @@ use nova_files_shell::{
 use self::rows::RowRead;
 use crate::band::Band;
 use crate::edge_scroll::EdgeScroll;
+use crate::filtering::Filter;
 use crate::grip;
 use crate::island::Island;
 use crate::jump::TypeJump;
@@ -63,6 +66,7 @@ use crate::lift::Lift;
 use crate::menu::Menu;
 use crate::scroll_bar::ScrollBar;
 use crate::selection::Selection;
+use crate::shortcuts::Shortcuts;
 use crate::theme_icons::ThemeIcons;
 use jobs::Jobs;
 use nova_files_shell::History;
@@ -107,6 +111,7 @@ pub struct MainWindow {
     sizing: views::Sizing,
     pub(crate) selection: Option<Selection>,
     pub(crate) jump: TypeJump,
+    filter: Filter,
     went: Went,
     pub(crate) band: Option<Band>,
     pub(crate) pressed_name: bool,
@@ -140,6 +145,7 @@ pub struct MainWindow {
     shown_page: Option<(TabId, PageRef)>,
     known: KnownFolders,
     pub(crate) menu: Option<Menu>,
+    pub(crate) shortcuts: Option<Shortcuts>,
     pub(crate) search: search::Over,
     pub(crate) focus: FocusHandle,
     pub(crate) island: Island,
@@ -227,6 +233,7 @@ impl MainWindow {
             sizing: views::Sizing::default(),
             selection: None,
             jump: TypeJump::default(),
+            filter: Filter::default(),
             went: Went::Stayed,
             band: None,
             pressed_name: false,
@@ -261,6 +268,7 @@ impl MainWindow {
             shown_page: None,
             known: KnownFolders::default(),
             menu: None,
+            shortcuts: None,
             search: search::Over::default(),
             focus: host.list.clone(),
             island: Island::default(),
@@ -364,6 +372,10 @@ impl MainWindow {
                 .map(|entry| entry.name.to_string_lossy().into_owned())
                 .collect()
         })
+    }
+
+    pub fn filter_text(&self) -> &str {
+        &self.filter.text
     }
 
     pub const fn scroll(&self) -> &UniformListScrollHandle {

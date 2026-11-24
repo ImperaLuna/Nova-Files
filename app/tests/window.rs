@@ -7,9 +7,9 @@
 mod common;
 mod window_band;
 mod window_drag;
+mod window_filter;
 mod window_gathered;
 mod window_island;
-mod window_jump;
 mod window_keys;
 mod window_opens_with;
 mod window_path;
@@ -357,6 +357,7 @@ async fn each_column_head_fills_its_column(cx: &mut TestAppContext) {
 
     let mut bounds = |selector| cx.debug_bounds(selector).unwrap();
     let name = bounds("head-name");
+    let kind = bounds("head-type");
     let modified = bounds("head-modified");
     let size = bounds("head-size");
     let column = bounds("modified-header");
@@ -365,8 +366,9 @@ async fn each_column_head_fills_its_column(cx: &mut TestAppContext) {
         modified.right() <= column.right(),
         "{modified:?} {column:?}"
     );
+    assert_eq!(kind.left() - name.right(), size.left() - modified.right());
     assert_eq!(
-        modified.left() - name.right(),
+        modified.left() - kind.right(),
         size.left() - modified.right()
     );
 }
@@ -405,6 +407,20 @@ async fn a_click_on_a_column_head_orders_the_list_by_it(cx: &mut TestAppContext)
     shows(cx, ["Projects", "a.txt", "big.txt", "notes.txt"]).await;
     click(cx, "head-name");
     shows(cx, ["Projects", "notes.txt", "big.txt", "a.txt"]).await;
+    click(cx, "head-type");
+    shows(cx, ["Projects", "a.txt", "big.txt", "notes.txt"]).await;
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("arrow-type").is_some());
+    view.read_with(cx, |view, _| assert!(!view.shown_order().descending));
+    click(cx, "head-type");
+    view.condition::<WindowEvent>(cx, |view, _| view.shown_order().descending)
+        .await;
+    view.read_with(cx, |view, _| {
+        assert_eq!(
+            view.entry_names(),
+            ["Projects", "a.txt", "big.txt", "notes.txt"]
+        );
+    });
 }
 
 fn pick_request(kind: PickKind) -> (Box<PickRequest>, mpsc::Receiver<PickAnswer>) {

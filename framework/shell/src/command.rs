@@ -1,8 +1,9 @@
 use std::fmt;
 
-use gpui::{Action, KeyBinding};
+use gpui::{Action, KeyBinding, Keystroke};
 
 use crate::rules::Allow;
+use crate::text::KEY_CONTEXT as TEXT_KEYS;
 
 pub const WINDOW_KEYS: &str = "MainWindow";
 
@@ -41,12 +42,25 @@ impl CommandSpec {
     }
 
     pub fn binding(&self, keys: &'static str) -> KeyBinding {
-        (self.bind)(keys, Some(WINDOW_KEYS))
+        if types_text(keys) {
+            (self.bind)(keys, Some(&format!("{WINDOW_KEYS} && !{TEXT_KEYS}")))
+        } else {
+            (self.bind)(keys, Some(WINDOW_KEYS))
+        }
     }
 
     pub fn bindings(&self) -> impl Iterator<Item = KeyBinding> + '_ {
         self.keys.iter().map(|keys| self.binding(keys))
     }
+}
+
+fn types_text(keys: &'static str) -> bool {
+    const SPACE: &str = "space";
+    Keystroke::parse(keys).is_ok_and(|stroke| {
+        let held = stroke.modifiers;
+        let typed = stroke.key.chars().count() == 1 || stroke.key == SPACE;
+        typed && !held.control && !held.alt && !held.platform && !held.function
+    })
 }
 
 impl PartialEq for CommandSpec {

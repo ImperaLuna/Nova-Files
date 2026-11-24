@@ -65,6 +65,10 @@ impl Parts {
         cx.bind_keys(new.into_iter().flat_map(CommandSpec::bindings));
     }
 
+    pub fn specs(&self) -> Vec<&'static CommandSpec> {
+        self.kinds.iter().flat_map(|kind| (kind.specs)()).collect()
+    }
+
     pub fn bindings(&self) -> Vec<KeyBinding> {
         self.kinds
             .iter()

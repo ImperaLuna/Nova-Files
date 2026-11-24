@@ -41,6 +41,8 @@ gpui::actions!(
         RenameSelected,
         NewFolder,
         NewFile,
+        Duplicate,
+        MakeLink,
         Undo,
         TogglePreview,
         PreviewPrevious,
@@ -59,6 +61,7 @@ gpui::actions!(
         BiggerIcons,
         SmallerIcons,
         OpenMenu,
+        ShowShortcuts,
         ShowProperties,
     ]
 );

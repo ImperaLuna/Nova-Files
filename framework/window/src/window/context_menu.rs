@@ -40,7 +40,7 @@ impl MainWindow {
     }
 
     pub(crate) fn menu_key(&mut self, cx: &mut Context<Self>) {
-        if !self.has_menus() {
+        if !self.has_menus() || self.shortcuts.is_some() {
             return;
         }
         let (at, groups) = if self.selected_count() > 0 {

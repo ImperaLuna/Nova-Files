@@ -43,7 +43,8 @@ impl MainWindow {
         let reordered = same_folder && self.shown_order != self.asked_order;
         self.shown_order = self.asked_order;
         let shown = self.shown_selection(&listing);
-        let wanted = shown;
+        let first = self.first_match(&listing);
+        let wanted = shown.or(first);
         let listing_path = listing.path.clone();
         let made = wanted.is_some();
         self.selection = wanted.or_else(|| self.selection_for(&listing, same_folder));
@@ -109,12 +110,13 @@ impl MainWindow {
                 first,
                 details,
                 icons,
+                kinds,
             } if self
                 .listing
                 .as_ref()
                 .is_some_and(|listing| listing.id == id) =>
             {
-                self.details_arrived(first, &details, &icons, cx);
+                self.details_arrived(first, &details, (&icons, &kinds), cx);
             }
             Event::FoldersMeasured { id, sizes }
                 if self

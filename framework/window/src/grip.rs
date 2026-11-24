@@ -21,9 +21,11 @@ pub struct Held {
 const fn bounds(part: Resizable) -> (Pixels, Pixels) {
     match part {
         Resizable::Sidebar => (size::SIDEBAR_NARROWEST, size::SIDEBAR_WIDEST),
-        Resizable::Part | Resizable::Folder | Resizable::Modified | Resizable::Size => {
-            (size::COLUMN_NARROWEST, size::COLUMN_WIDEST)
-        }
+        Resizable::Part
+        | Resizable::Folder
+        | Resizable::Kind
+        | Resizable::Modified
+        | Resizable::Size => (size::COLUMN_NARROWEST, size::COLUMN_WIDEST),
     }
 }
 
@@ -51,6 +53,7 @@ impl MainWindow {
             Resizable::Sidebar => size::SIDEBAR_WIDTH,
             Resizable::Part => size::PART_WIDTH,
             Resizable::Folder => size::FOLDER_WIDTH,
+            Resizable::Kind => size::KIND_WIDTH,
             Resizable::Modified => size::MODIFIED_WIDTH,
             Resizable::Size => size::SIZE_WIDTH,
         }

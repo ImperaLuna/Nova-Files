@@ -24,11 +24,14 @@ pub enum Command {
     /// `id`. A newer `ListFolder` from the same client cancels this one,
     /// which then may never answer. An order by modified time or size reads
     /// every entry's details before the listing goes out. Hidden entries
-    /// are listed only while the [`crate::HiddenFiles`] setting shows them.
+    /// are listed only while the [`crate::HiddenFiles`] setting shows them,
+    /// and only entries whose names hold every word of `filter` are listed
+    /// (see [`crate::holds_every_word`]); an empty `filter` lists them all.
     ListFolder {
         id: ListingId,
         path: PathBuf,
         order: Order,
+        filter: String,
     },
     /// The entries of listing `id` the client shows or is about to show:
     /// `count` entries from `first`. The core reads the details of those it
@@ -117,13 +120,15 @@ pub enum Event {
     },
     /// Details for entries `first` onward of listing `id`, one per entry,
     /// in entry order, answering [`Command::Rows`], and each entry's icon
-    /// in the same order. Each entry's details come at most once per
-    /// listing.
+    /// and the system's name for its type ("PDF document") in the same
+    /// order; a folder, or a file of a type the system can't name, has no
+    /// name. Each entry's details come at most once per listing.
     DetailsRead {
         id: ListingId,
         first: EntryId,
         details: Arc<[Details]>,
         icons: Arc<[FileIcon]>,
+        kinds: Arc<[Option<Arc<str>>]>,
     },
     /// How many bytes the folders of listing `id` hold so far, by entry,
     /// sent after a listing by [`crate::SortKey::Size`] while

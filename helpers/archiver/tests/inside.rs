@@ -43,7 +43,12 @@ fn list(
     order: Order,
 ) -> Result<Vec<(String, EntryKind)>, Unreadable> {
     let id = ListingId(1);
-    bench.send(Command::ListFolder { id, path, order });
+    bench.send(Command::ListFolder {
+        id,
+        path,
+        order,
+        filter: String::new(),
+    });
     loop {
         match bench.next() {
             Event::FolderListed(listing) if listing.id == id => {

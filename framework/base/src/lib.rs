@@ -21,6 +21,7 @@ mod folder_sizes;
 mod hidden_files;
 mod job;
 mod message;
+mod name_filter;
 pub mod numbered;
 mod preview;
 mod theme;
@@ -42,6 +43,7 @@ pub use job::{
     Question, Scope, Tally,
 };
 pub use message::{Command, Event, MAX_ROWS};
+pub use name_filter::{find_word, holds_every_word};
 pub use nova_files_messages::{
     ClientGone, ClientId, Connection, Connector, CoreGone, CoreMessage, Envelope, EventSink,
     Message, MessageType, Routed, Routes, channel, missing_routes,
