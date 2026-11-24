@@ -359,6 +359,7 @@ fn a_folder_asked_for_after_a_find_replaces_it() {
         id: folder,
         path: scratch.home(),
         order: Order::default(),
+        filter: String::new(),
     };
     client.connection.send(list).unwrap();
     let started = Instant::now();

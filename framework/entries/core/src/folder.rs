@@ -19,13 +19,25 @@ pub trait InnerFolders: Send + Sync {
     fn list(&self, path: &Path, order: Order, hidden: HiddenFiles) -> Option<Inner>;
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Shown {
+    pub order: Order,
+    pub hidden: HiddenFiles,
+    pub filter: String,
+}
+
 pub fn list_folder(
     client: &Client,
     (id, path): (ListingId, PathBuf),
-    (order, hidden): (Order, HiddenFiles),
+    shown: Shown,
     inner: &Arc<dyn InnerFolders>,
     sizer: Option<&Arc<FolderSizer>>,
 ) {
+    let Shown {
+        order,
+        hidden,
+        filter,
+    } = shown;
     let job = client.start_listing(id);
     let job_path = path.clone();
     let inner = Arc::clone(inner);
@@ -35,11 +47,12 @@ pub fn list_folder(
         .spawn(move || {
             let cancelled = || job.cancelled();
             let entries = match list::read_folder(&job_path, cancelled) {
-                Ok(entries) => list::keep_shown(entries, hidden),
+                Ok(entries) => list::keep_named(list::keep_shown(entries, hidden), &filter),
                 Err(Stopped::Unreadable(reason)) => {
                     let elsewhere = matches!(reason, Unreadable::NotAFolder | Unreadable::Missing)
                         .then(|| inner.list(&job_path, order, hidden))
-                        .flatten();
+                        .flatten()
+                        .map(|listed| list::keep_named_known(listed, &filter));
                     match elsewhere {
                         Some(listed) => send_inner(&job, (id, job_path), listed),
                         None => job.answer(Event::FolderUnreadable {

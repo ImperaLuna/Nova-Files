@@ -111,7 +111,8 @@ impl MainWindow {
     }
 
     fn quiet_count(&self, colors: &Colors) -> impl IntoElement {
-        let line = Some(self.counted.clone()).filter(|line| !line.is_empty());
+        let line =
+            Some(self.counted.clone()).filter(|line| !line.is_empty() && !self.filter().on());
         div().when_some(line, |slot, line| {
             slot.child(
                 div()

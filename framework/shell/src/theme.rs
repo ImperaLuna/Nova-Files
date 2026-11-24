@@ -340,6 +340,8 @@ pub mod size {
     pub const COUNT_BOTTOM: Pixels = px(12.0);
     pub const COUNT_PAD_X: Pixels = px(8.0);
     pub const COUNT_PAD_Y: Pixels = px(3.0);
+    pub const FILTER_CLEAR: Pixels = px(20.0);
+    pub const FILTER_CLEAR_ICON: Pixels = px(14.0);
     pub const MENU_ICON: Pixels = px(16.0);
     pub const SECTION_BUTTON: Pixels = px(24.0);
     pub const SECTION_BUTTON_ICON: Pixels = px(15.0);
