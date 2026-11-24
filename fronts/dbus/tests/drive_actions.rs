@@ -305,7 +305,7 @@ fn unlocking_a_volume_that_is_not_encrypted_fails() {
         Udisks::new(bus.bus()).act(&unlock(STICK_VOLUME, LOCKED_PASSWORD)),
         Err(DriveFailure::Gone | DriveFailure::Failed(_))
     ));
-    assert!(udisks.calls().is_empty());
+    assert_eq!(udisks.calls(), Vec::<String>::new());
 }
 
 #[test]
