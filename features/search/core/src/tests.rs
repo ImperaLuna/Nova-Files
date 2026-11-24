@@ -114,7 +114,11 @@ fn a_newer_search_cancels_one_waiting_for_the_index() {
     assert!(events.recv_timeout(QUIET).is_err());
 }
 
-fn stages_around_catch_up(change: impl FnOnce(&Path), text: &str, limit: u32) -> [Vec<PathBuf>; 2] {
+fn stages_around_catch_up(
+    change: impl FnOnce(&Path),
+    text: &str,
+    limit: u32,
+) -> (Vec<PathBuf>, Vec<PathBuf>) {
     let scratch = Scratch::new("catch-up");
     scratch.searcher().search_and_settle();
     let home = scratch.root.join("home");
@@ -149,7 +153,7 @@ fn stages_around_catch_up(change: impl FnOnce(&Path), text: &str, limit: u32) ->
         panic!("expected a last stage");
     };
     assert!(events.recv_timeout(QUIET).is_err());
-    [first, within_home(hits)]
+    (first, within_home(hits))
 }
 
 fn paths(names: &[&str]) -> Vec<PathBuf> {
@@ -159,7 +163,7 @@ fn paths(names: &[&str]) -> Vec<PathBuf> {
 #[test]
 fn a_search_before_the_catch_up_answers_at_once_and_ends_with_what_changed() {
     let made = |home: &Path| fs::write(home.join("docs/report-late.pdf"), b"").unwrap();
-    let [first, last] = stages_around_catch_up(made, "report", LIMIT);
+    let (first, last) = stages_around_catch_up(made, "report", LIMIT);
     assert_eq!(first, paths(&["docs/report.pdf"]));
     assert_eq!(last, paths(&["docs/report-late.pdf"]));
 }
@@ -167,16 +171,16 @@ fn a_search_before_the_catch_up_answers_at_once_and_ends_with_what_changed() {
 #[test]
 fn what_the_catch_up_found_comes_before_loose_matches_that_fill_the_last_stage() {
     let made = |home: &Path| fs::write(home.join("docs/rprt.txt"), b"").unwrap();
-    let [_, unchanged] = stages_around_catch_up(|_| {}, "rprt", 1);
+    let (_, unchanged) = stages_around_catch_up(|_| {}, "rprt", 1);
     assert_eq!(unchanged, paths(&["docs/report.pdf"]));
-    let [_, changed] = stages_around_catch_up(made, "rprt", 1);
+    let (_, changed) = stages_around_catch_up(made, "rprt", 1);
     assert_eq!(changed, paths(&["docs/rprt.txt"]));
 }
 
 #[test]
 fn the_last_stage_leaves_out_what_the_catch_up_found_gone() {
     let removed = |home: &Path| fs::remove_file(home.join("docs/report.pdf")).unwrap();
-    let [_, last] = stages_around_catch_up(removed, "rprt", LIMIT);
+    let (_, last) = stages_around_catch_up(removed, "rprt", LIMIT);
     assert!(last.is_empty());
 }
 
