@@ -10,7 +10,7 @@ use super::entry::{self, Entry};
 
 pub const LIST: &str = "mimeapps.list";
 pub const DESKTOP_LIST_SUFFIX: &str = "-mimeapps.list";
-const APPLICATIONS: &str = "applications";
+pub const APPLICATIONS: &str = "applications";
 const CACHE: &str = "mimeinfo.cache";
 pub const DEFAULTS: &str = "Default Applications";
 pub const ADDED: &str = "Added Associations";

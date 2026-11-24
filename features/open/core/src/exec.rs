@@ -47,6 +47,33 @@ pub fn command_lines(
         .collect()
 }
 
+pub fn bare_line(exec: &str, fields: Fields<'_>) -> Option<Vec<OsString>> {
+    let mut line = Vec::new();
+    for word in split(exec)? {
+        if word.quoted {
+            line.push(OsString::from(word.text));
+            continue;
+        }
+        match word.text.as_str() {
+            "%i" => line.extend(icon_words(fields)),
+            text => {
+                let (expanded, file_in_word) = expand(text, Path::new(""), fields)?;
+                if !file_in_word && !expanded.is_empty() {
+                    line.push(expanded);
+                }
+            }
+        }
+    }
+    (!line.is_empty()).then_some(line)
+}
+
+fn icon_words(fields: Fields<'_>) -> impl Iterator<Item = OsString> {
+    fields
+        .icon
+        .into_iter()
+        .flat_map(|icon| [OsString::from(ICON_OPTION), OsString::from(icon)])
+}
+
 fn line_for(words: &[Word], files: &[&Path], fields: Fields<'_>) -> Option<Vec<OsString>> {
     let first = files.first()?;
     let mut line = Vec::with_capacity(words.len() + files.len());
@@ -57,11 +84,7 @@ fn line_for(words: &[Word], files: &[&Path], fields: Fields<'_>) -> Option<Vec<O
             continue;
         }
         match word.text.as_str() {
-            "%i" => {
-                if let Some(icon) = fields.icon {
-                    line.extend([OsString::from(ICON_OPTION), OsString::from(icon)]);
-                }
-            }
+            "%i" => line.extend(icon_words(fields)),
             "%F" => {
                 line.extend(files.iter().map(|file| file.as_os_str().to_owned()));
                 took_file = true;

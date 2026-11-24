@@ -50,11 +50,13 @@ pub enum Icon {
     Undo,
     Info,
     Person,
+    CopyPath,
+    Terminal,
     NewFile,
 }
 
 impl Icon {
-    const ALL: [Self; 45] = [
+    const ALL: [Self; 47] = [
         Self::Folder,
         Self::File,
         Self::FileText,
@@ -99,6 +101,8 @@ impl Icon {
         Self::Undo,
         Self::Info,
         Self::Person,
+        Self::CopyPath,
+        Self::Terminal,
         Self::NewFile,
     ];
 
@@ -148,6 +152,8 @@ impl Icon {
             Self::Undo => "icons/undo.svg",
             Self::Info => "icons/info.svg",
             Self::Person => "icons/person.svg",
+            Self::CopyPath => "icons/copy-path.svg",
+            Self::Terminal => "icons/terminal.svg",
             Self::NewFile => "icons/new-file.svg",
         }
     }
@@ -198,6 +204,8 @@ impl Icon {
             Self::Undo => svg::UNDO,
             Self::Info => svg::INFO,
             Self::Person => svg::PERSON,
+            Self::CopyPath => svg::COPY_PATH,
+            Self::Terminal => svg::TERMINAL,
             Self::NewFile => svg::NEW_FILE,
         };
         source.as_bytes()

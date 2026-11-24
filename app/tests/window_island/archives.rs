@@ -52,6 +52,7 @@ async fn an_archive_offers_extract_in_its_own_group(cx: &mut TestAppContext) {
                 "Extract to…",
                 "Cut",
                 "Copy",
+                "Copy path",
                 "Rename",
                 "Compress",
                 "Compress as…",
@@ -60,7 +61,7 @@ async fn an_archive_offers_extract_in_its_own_group(cx: &mut TestAppContext) {
             ]
             .map(str::to_owned)
             .to_vec(),
-            vec![2, 4, 9, 10]
+            vec![2, 4, 10, 11]
         )
     );
 

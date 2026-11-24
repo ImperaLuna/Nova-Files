@@ -2,17 +2,42 @@
 
 use std::path::{Path, PathBuf};
 
-use gpui::{Context, Subscription};
+use gpui::{App, Context, Subscription, Window};
 use nova_files_api::Entry;
 use nova_files_api::uri::file_uri;
 use nova_files_open_api::{Command, Event, NotOpened};
-use nova_files_shell::{Host, NoteGone, NoteId, Part, Slots};
+use nova_files_shell::assets::Icon;
+use nova_files_shell::{
+    Host, Location, MenuAt, MenuGroup, MenuItem, NoteGone, NoteId, Part, Placed, Scene, Slots,
+    command_spec,
+};
+
+mod actions {
+    #![expect(
+        clippy::derive_partial_eq_without_eq,
+        reason = "GPUI's actions! macro derives PartialEq only"
+    )]
+    gpui::actions!(nova_files_open, [OpenTerminalHere]);
+}
+
+pub use actions::OpenTerminalHere;
+
+command_spec!(
+    OPEN_TERMINAL,
+    OpenTerminalHere,
+    "folder.open-terminal",
+    "Open terminal here",
+    ["shift-f4"],
+    needs[TakeOut]
+);
 
 const MOST_NAMES: usize = 3;
 const FILE: &str = "file";
 const FILES: &str = "files";
 const LIST_GAP: &str = ", ";
 const ROOT: &str = "/";
+const NO_TERMINAL: &str = "No terminal found";
+const TERMINAL_FAILED: &str = "Can't open a terminal here";
 
 pub struct OpenPart {
     host: Host,
@@ -33,9 +58,34 @@ impl OpenPart {
         true
     }
 
-    fn opened(&mut self, event: Event, cx: &mut Context<Self>) {
-        let Event::NotOpened { path, reason } = event else {
+    fn open_terminal(&mut self, _: &OpenTerminalHere, _: &mut Window, cx: &mut Context<Self>) {
+        let Some(folder) = here(&self.host.scene(cx)) else {
             return;
+        };
+        let asked = self.host.link.send(Command::OpenTerminal {
+            folder,
+            activation: None,
+        });
+        if asked.is_err() {
+            self.terminal_failed(NotOpened::Failed, cx);
+        }
+    }
+
+    fn terminal_failed(&self, reason: NotOpened, cx: &mut Context<Self>) {
+        let label = terminal_note(reason);
+        self.host
+            .island
+            .update(cx, |island, cx| island.note(label.to_owned(), None, cx));
+    }
+
+    fn opened(&mut self, event: Event, cx: &mut Context<Self>) {
+        let (path, reason) = match event {
+            Event::NotOpened { path, reason } => (path, reason),
+            Event::TerminalNotOpened { reason, .. } => {
+                self.terminal_failed(reason, cx);
+                return;
+            }
+            Event::Opened { .. } | Event::OpenWith(_) => return,
         };
         if reason != NotOpened::Failed {
             hand_to_desktop(&path, cx);
@@ -71,9 +121,40 @@ impl Part for OpenPart {
     }
 
     fn slots(slots: &mut Slots<Self>) {
+        slots.command(&OPEN_TERMINAL, in_folder, Self::open_terminal);
+        slots.menu_in(MenuAt::Sheet, MenuGroup::Edit, Placed::LAST, terminal_item);
         slots.on_event(Self::opened);
         slots.opens(Self::open_file);
         slots.sends::<Command>();
+    }
+}
+
+fn here(scene: &Scene) -> Option<PathBuf> {
+    if scene.picker {
+        return None;
+    }
+    scene
+        .location
+        .as_ref()
+        .and_then(Location::folder)
+        .map(Path::to_path_buf)
+}
+
+fn in_folder(_: &OpenPart, scene: &Scene, _: &App) -> bool {
+    here(scene).is_some()
+}
+
+fn terminal_item(_: &OpenPart, scene: &Scene, _: &App) -> Vec<MenuItem> {
+    if here(scene).is_none() || scene.searching {
+        return Vec::new();
+    }
+    vec![MenuItem::run(Icon::Terminal, &OPEN_TERMINAL)]
+}
+
+const fn terminal_note(reason: NotOpened) -> &'static str {
+    match reason {
+        NotOpened::NoApp | NotOpened::Sandboxed => NO_TERMINAL,
+        NotOpened::Failed => TERMINAL_FAILED,
     }
 }
 

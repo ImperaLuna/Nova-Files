@@ -16,10 +16,13 @@ mod actions {
         clippy::derive_partial_eq_without_eq,
         reason = "GPUI's actions! macro derives PartialEq only"
     )]
-    gpui::actions!(nova_files_clipboard, [CopySelected, CutSelected, Paste]);
+    gpui::actions!(
+        nova_files_clipboard,
+        [CopySelected, CutSelected, Paste, CopyPath, CopyFolderPath]
+    );
 }
 
-pub use actions::{CopySelected, CutSelected, Paste};
+pub use actions::{CopyFolderPath, CopyPath, CopySelected, CutSelected, Paste};
 
 command_spec!(
     COPY,
@@ -45,8 +48,27 @@ command_spec!(
     ["ctrl-v"],
     needs[Change]
 );
+command_spec!(
+    COPY_PATH,
+    CopyPath,
+    "file.copy-path",
+    "Copy path",
+    ["ctrl-shift-c"],
+    needs[TakeOut]
+);
+command_spec!(
+    COPY_FOLDER_PATH,
+    CopyFolderPath,
+    "folder.copy-path",
+    "Copy path",
+    [],
+    needs[TakeOut]
+);
 
 const ITEMS: &str = "items";
+const COPIED_PATH: &str = "Copied path";
+const COPIED_PATHS: &str = "paths";
+const LINE: &str = "\n";
 const ROOT: &str = "/";
 
 pub struct ClipboardPart {
@@ -69,6 +91,35 @@ impl ClipboardPart {
             return;
         };
         cx.write_to_clipboard(item);
+        self.host
+            .island
+            .update(cx, |island, cx| island.note(note, None, cx));
+    }
+
+    fn copy_path(&mut self, _: &CopyPath, _: &mut Window, cx: &mut Context<Self>) {
+        let selected = self.host.entries.read(cx).selected_paths();
+        if selected.is_empty() {
+            self.put_paths(&self.here(cx), cx);
+        } else {
+            self.put_paths(&selected, cx);
+        }
+    }
+
+    fn copy_folder_path(&mut self, _: &CopyFolderPath, _: &mut Window, cx: &mut Context<Self>) {
+        self.put_paths(&self.here(cx), cx);
+    }
+
+    fn here(&self, cx: &App) -> Vec<PathBuf> {
+        let scene = self.host.scene(cx);
+        let here = scene.location.as_ref().and_then(Location::folder);
+        here.map(Path::to_path_buf).into_iter().collect()
+    }
+
+    fn put_paths(&self, paths: &[PathBuf], cx: &mut Context<Self>) {
+        let Some(note) = path_note(paths) else {
+            return;
+        };
+        cx.write_to_clipboard(ClipboardItem::new_string(path_text(paths)));
         self.host
             .island
             .update(cx, |island, cx| island.note(note, None, cx));
@@ -113,15 +164,20 @@ fn entry_items(_: &ClipboardPart, _: &Scene, _: &App) -> Vec<MenuItem> {
     vec![
         MenuItem::run(Icon::Cut, &CUT),
         MenuItem::run(Icon::Copy, &COPY),
+        MenuItem::run(Icon::CopyPath, &COPY_PATH),
     ]
 }
 
 fn sheet_items(_: &ClipboardPart, scene: &Scene, cx: &App) -> Vec<MenuItem> {
     let in_folder = scene.location.as_ref().and_then(Location::folder).is_some();
-    if scene.searching || !in_folder || !has_files(cx) {
+    if scene.searching || !in_folder {
         return Vec::new();
     }
-    vec![MenuItem::run(Icon::Paste, &PASTE)]
+    let paste = has_files(cx).then(|| MenuItem::run(Icon::Paste, &PASTE));
+    paste
+        .into_iter()
+        .chain([MenuItem::run(Icon::CopyPath, &COPY_FOLDER_PATH)])
+        .collect()
 }
 
 fn island_buttons(_: &ClipboardPart, _: &Scene, _: &App) -> Vec<MenuItem> {
@@ -141,6 +197,22 @@ fn note(action: ClipboardAction, paths: &[PathBuf]) -> String {
         ClipboardAction::Cut => "Cut",
     };
     format!("{verb} {}", what(paths))
+}
+
+fn path_note(paths: &[PathBuf]) -> Option<String> {
+    match paths {
+        [] => None,
+        [_] => Some(COPIED_PATH.to_owned()),
+        many => Some(format!("Copied {} {COPIED_PATHS}", many.len())),
+    }
+}
+
+fn path_text(paths: &[PathBuf]) -> String {
+    paths
+        .iter()
+        .map(|path| path.to_string_lossy())
+        .collect::<Vec<_>>()
+        .join(LINE)
 }
 
 fn what(paths: &[PathBuf]) -> String {
@@ -195,6 +267,8 @@ impl Part for ClipboardPart {
         slots.command(&COPY, not_picking, Self::copy);
         slots.command(&CUT, not_picking, Self::cut);
         slots.command(&PASTE, pastes_here, Self::paste);
+        slots.command(&COPY_PATH, not_picking, Self::copy_path);
+        slots.command(&COPY_FOLDER_PATH, not_picking, Self::copy_folder_path);
         slots.menu_in(MenuAt::Entry, MenuGroup::Edit, Placed::FIRST, entry_items);
         slots.menu_in(MenuAt::Sheet, MenuGroup::Edit, Placed::SECOND, sheet_items);
         slots.menu_in(
@@ -265,6 +339,15 @@ mod tests {
             "Cut 3 items"
         );
         assert_eq!(name_of(Path::new("/")), "/");
+    }
+
+    #[test]
+    fn paths_go_out_as_plain_lines_and_the_note_counts_them() {
+        let paths = vec![PathBuf::from("/tmp/a b.txt"), PathBuf::from("/tmp/c")];
+        assert_eq!(path_text(&paths), "/tmp/a b.txt\n/tmp/c");
+        assert_eq!(path_note(&paths).as_deref(), Some("Copied 2 paths"));
+        assert_eq!(path_note(&paths[..1]).as_deref(), Some("Copied path"));
+        assert_eq!(path_note(&[]), None);
     }
 
     #[test]

@@ -72,6 +72,7 @@ async fn an_entry_offers_its_actions_and_each_does_what_its_key_does(cx: &mut Te
                 "Preview",
                 "Cut",
                 "Copy",
+                "Copy path",
                 "Rename",
                 "Compress",
                 "Compress as…",
@@ -80,12 +81,12 @@ async fn an_entry_offers_its_actions_and_each_does_what_its_key_does(cx: &mut Te
             ]
             .map(str::to_owned)
             .to_vec(),
-            vec![2, 7, 8]
+            vec![2, 8, 9]
         )
     );
     view.read_with(cx, |view, _| {
         let menu = view.menu().unwrap();
-        assert_eq!(menu.items[7].look, Look::Danger);
+        assert_eq!(menu.items[8].look, Look::Danger);
         assert!(matches!(menu.items[3].action, MenuAction::Run(_)));
     });
     cx.run_until_parked();
@@ -108,6 +109,8 @@ async fn an_entry_offers_its_actions_and_each_does_what_its_key_does(cx: &mut Te
                 "New folder",
                 "New file",
                 "Paste",
+                "Copy path",
+                "Open terminal here",
                 "Select all",
                 "Details",
                 "Icons",
@@ -117,7 +120,7 @@ async fn an_entry_offers_its_actions_and_each_does_what_its_key_does(cx: &mut Te
             ]
             .map(str::to_owned)
             .to_vec(),
-            vec![3, 4, 7]
+            vec![5, 6, 9]
         )
     );
     choose(&view, cx, "Paste");
@@ -147,6 +150,7 @@ async fn several_entries_offer_only_what_applies_to_all(cx: &mut TestAppContext)
             [
                 "Cut",
                 "Copy",
+                "Copy path",
                 "Compress",
                 "Compress as…",
                 "Move to Trash",
@@ -154,7 +158,7 @@ async fn several_entries_offer_only_what_applies_to_all(cx: &mut TestAppContext)
             ]
             .map(str::to_owned)
             .to_vec(),
-            vec![4, 5]
+            vec![5, 6]
         )
     );
 
@@ -176,6 +180,8 @@ async fn the_menu_key_opens_the_menu_with_its_first_item_marked(cx: &mut TestApp
         [
             "New folder",
             "New file",
+            "Copy path",
+            "Open terminal here",
             "Select all",
             "Details",
             "Icons",
@@ -406,6 +412,7 @@ async fn a_folder_opens_in_a_new_tab_from_its_menu(cx: &mut TestAppContext) {
             "Preview",
             "Cut",
             "Copy",
+            "Copy path",
             "Rename",
             "Compress",
             "Compress as…",
@@ -595,11 +602,11 @@ async fn a_letter_marks_the_next_item_starting_with_it(cx: &mut TestAppContext) 
 
     cx.simulate_keystrokes("shift-f10");
     cx.simulate_keystrokes("d");
-    assert_eq!(marked(&view, cx), Some(3), "Details");
+    assert_eq!(marked(&view, cx), Some(5), "Details");
     cx.simulate_keystrokes("s");
-    assert_eq!(marked(&view, cx), Some(6), "Show hidden files");
+    assert_eq!(marked(&view, cx), Some(8), "Show hidden files");
     cx.simulate_keystrokes("s");
-    assert_eq!(marked(&view, cx), Some(2), "round again to Select all");
+    assert_eq!(marked(&view, cx), Some(4), "round again to Select all");
     cx.simulate_keystrokes("enter");
     assert_eq!(
         view.read_with(cx, |view, _| view.selected_names()),
@@ -624,7 +631,7 @@ async fn a_right_press_slid_to_an_item_and_let_go_chooses_it(cx: &mut TestAppCon
         view.read_with(cx, |view, _| view.menu().is_some()),
         "letting go where it opened keeps it open"
     );
-    let select_all = cx.debug_bounds("menu-2").unwrap().center();
+    let select_all = cx.debug_bounds("menu-4").unwrap().center();
     cx.simulate_mouse_move(select_all, None, Modifiers::none());
     cx.simulate_mouse_up(select_all, gpui::MouseButton::Right, Modifiers::none());
     cx.run_until_parked();

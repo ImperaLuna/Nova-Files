@@ -18,10 +18,9 @@ use super::row::{
 use nova_files_shell::{Allow, PageRef, Resizable, ShownColumn};
 
 use crate::assets::Icon;
-use crate::dropping::shell_place;
 use crate::marks;
 use crate::theme::{Colors, opacity, radius, size, text};
-use crate::window::{Aim, HoverOpens, MainWindow};
+use crate::window::{Aim, MainWindow};
 use nova_files_shell::Grid;
 
 const NAME_LABEL: &str = "Name";
@@ -180,7 +179,7 @@ impl MainWindow {
                             format!("modified-{index}"),
                         );
                         entry_row(index, (listing_id, id), corners, &colors, cx)
-                            .when_some(folder_at, |row, at| this.folder_row(row, at, cx))
+                            .when_some(folder_at, |row, at| this.folder_target(row, at, cx))
                             .when(on, |row| row.bg(colors.selected).text_color(colors.text))
                             .child(line)
                             .when(this.cursor() == Some(index), |row| {
@@ -206,14 +205,6 @@ impl MainWindow {
 }
 
 impl MainWindow {
-    fn folder_row(&self, row: Stateful<Div>, at: Aim, cx: &Context<Self>) -> Stateful<Div> {
-        let row = match shell_place(&at.at) {
-            Some(place) => Self::opens_on_hover(row, HoverOpens::Place(place), cx),
-            None => row,
-        };
-        self.drop_target(row, at, cx)
-    }
-
     fn name_cell(
         &self,
         entry: &Entry,
