@@ -8,7 +8,7 @@ use std::time::Duration;
 use nova_files_api::{EventSink, JobTag, Operation};
 use nova_files_disk::timed;
 use nova_files_jobs::{JobKind, Jobs, lock};
-use nova_files_transfer_api::{DropAskId, DropKind, Event, copy, move_into};
+use nova_files_transfer_api::{DropAskId, DropKind, Event, copy, link, move_into};
 
 const PROBE_WAIT: Duration = Duration::from_secs(2);
 
@@ -22,6 +22,7 @@ pub fn dropped(sources: Vec<PathBuf>, into: PathBuf) -> Operation {
     match kind(&sources, &into) {
         DropKind::Move => move_into(sources, into),
         DropKind::Copy => copy(sources, into),
+        DropKind::Link => link(sources, into),
     }
 }
 

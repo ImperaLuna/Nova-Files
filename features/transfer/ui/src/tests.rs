@@ -11,7 +11,7 @@ fn keys_held_pick_copy_or_move_and_otherwise_the_drive_does() {
         ..Modifiers::control()
     };
     assert_eq!(picked(Modifiers::control()), Some(DropKind::Copy));
-    assert_eq!(picked(both), Some(DropKind::Copy));
+    assert_eq!(picked(both), Some(DropKind::Link));
     assert_eq!(picked(Modifiers::shift()), Some(DropKind::Move));
     assert_eq!(picked(Modifiers::none()), None);
 }
@@ -20,6 +20,7 @@ fn keys_held_pick_copy_or_move_and_otherwise_the_drive_does() {
 fn the_chip_names_the_drop_and_its_folder() {
     assert_eq!(label(DropKind::Move, "Backup"), "Move to Backup");
     assert_eq!(label(DropKind::Copy, "Backup"), "Copy to Backup");
+    assert_eq!(label(DropKind::Link, "Backup"), "Link in Backup");
 }
 
 #[test]

@@ -6,8 +6,9 @@ use nova_files_jobs::rest::still_there;
 use nova_files_jobs::running::Running;
 use nova_files_jobs::undo::landed;
 use nova_files_jobs::{Ended, JobKind};
-use nova_files_transfer_api::{CopyJob, MoveJob, copy, journal, move_into};
+use nova_files_transfer_api::{CopyJob, LinkJob, MoveJob, copy, journal, link, move_into};
 
+use crate::links::make_links;
 use crate::undo::{self, Undo, undo_of};
 use crate::{How, transfer};
 
@@ -29,12 +30,15 @@ impl JobKind for Transfers {
     type Undo = Undo;
 
     fn claims(&self, operation: &Operation) -> bool {
-        asked(operation).is_some()
+        asked(operation).is_some() || operation.get::<LinkJob>().is_some()
     }
 
     fn run(&self, running: &mut Running, operation: &Operation, undo: Option<&Undo>) -> Ended {
         if let Some(undo) = undo {
             return undo::run(running, undo);
+        }
+        if let Some(job) = operation.get::<LinkJob>() {
+            return make_links(running, &job.sources, &job.into);
         }
         match asked(operation) {
             Some((sources, into, how)) => transfer(running, sources, into, how),
@@ -56,7 +60,7 @@ impl JobKind for Transfers {
     }
 
     fn undo(&self, running: &mut Running, operation: &Operation, _: &Ended) -> Option<Undo> {
-        let (_, _, how) = asked(operation)?;
+        let how = asked(operation).map_or(How::Copy, |(_, _, how)| how);
         undo_of(how, landed(running))
     }
 
@@ -64,13 +68,17 @@ impl JobKind for Transfers {
         vec![
             copy(Vec::new(), PathBuf::new()),
             move_into(Vec::new(), PathBuf::new()),
+            link(Vec::new(), PathBuf::new()),
         ]
     }
 
     fn first_path(&self, operation: &Operation) -> PathBuf {
-        asked(operation).map_or_else(PathBuf::new, |(sources, into, _)| {
-            sources.first().map_or(into, PathBuf::as_path).to_path_buf()
-        })
+        let (sources, into) = match (asked(operation), operation.get::<LinkJob>()) {
+            (Some((sources, into, _)), _) => (sources, into),
+            (None, Some(job)) => (job.sources.as_slice(), job.into.as_path()),
+            (None, None) => return PathBuf::new(),
+        };
+        sources.first().map_or(into, PathBuf::as_path).to_path_buf()
     }
 
     fn resume(
