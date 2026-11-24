@@ -35,6 +35,7 @@ impl Corners {
 #[derive(Debug, Clone, Copy)]
 pub struct ColumnWidths {
     pub folder: Pixels,
+    pub kind: Pixels,
     pub modified: Pixels,
     pub size: Pixels,
 }
@@ -42,7 +43,7 @@ pub struct ColumnWidths {
 pub fn cells(
     name: impl IntoElement,
     folder: Option<AnyElement>,
-    modified: impl IntoElement,
+    (kind, modified): (impl IntoElement, impl IntoElement),
     (size_cell, widths): (impl IntoElement, ColumnWidths),
     modified_selector: String,
 ) -> impl IntoElement {
@@ -65,6 +66,7 @@ pub fn cells(
         .h_full()
         .child(div().flex_1().min_w_0().h_full().child(name))
         .children(folder.map(|folder| column(widths.folder).child(folder)))
+        .child(column(widths.kind).child(kind))
         .child(
             column(widths.modified)
                 .debug_selector(|| modified_selector)

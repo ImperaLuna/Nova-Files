@@ -26,6 +26,7 @@ pub struct Client {
     current_listing: Arc<AtomicU64>,
     details: Option<Arc<details_queue::Queue>>,
     rows: Option<Arc<dyn RowWatch>>,
+    icons: Arc<dyn Icons>,
 }
 
 impl Client {
@@ -41,6 +42,7 @@ impl Client {
             current_listing: Arc::new(AtomicU64::new(NO_LISTING)),
             details,
             rows,
+            icons: Arc::clone(icons),
         }
     }
 
@@ -75,6 +77,7 @@ impl Client {
             current: Arc::clone(&self.current_listing),
             details: self.details.clone(),
             rows: self.rows.clone(),
+            icons: Arc::clone(&self.icons),
         }
     }
 
@@ -95,9 +98,14 @@ pub struct ListingJob {
     current: Arc<AtomicU64>,
     details: Option<Arc<details_queue::Queue>>,
     rows: Option<Arc<dyn RowWatch>>,
+    icons: Arc<dyn Icons>,
 }
 
 impl ListingJob {
+    pub fn kinds(&self) -> &dyn Icons {
+        self.icons.as_ref()
+    }
+
     pub fn cancelled(&self) -> bool {
         self.current.load(Ordering::SeqCst) != self.id.0
     }
@@ -141,6 +149,10 @@ mod tests {
     impl Icons for Plain {
         fn of(&self, _: &std::ffi::OsStr, _: EntryKind) -> FileIcon {
             FileIcon::BuiltIn(IconKind::Folder)
+        }
+
+        fn kind_name(&self, _: &std::ffi::OsStr, _: EntryKind) -> Option<Arc<str>> {
+            None
         }
 
         fn follow_desktop(&self, _: &[String]) {}

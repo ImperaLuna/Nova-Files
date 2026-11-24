@@ -153,7 +153,7 @@ impl Shared {
         &self,
         run: &Run,
         read: Vec<Details>,
-        icons: Vec<FileIcon>,
+        (icons, kinds): (Vec<FileIcon>, Vec<Option<Arc<str>>>),
         events: &dyn EventSink,
     ) -> Result<(), ClientGone> {
         let mut state = self.lock();
@@ -173,6 +173,7 @@ impl Shared {
             first: EntryId(first),
             details: read.into(),
             icons: icons.into(),
+            kinds: kinds.into(),
         })
     }
 }
@@ -191,11 +192,16 @@ fn work(shared: &Shared, events: &dyn EventSink, icons: &dyn Icons) {
         if !shared.still_wanted(&run) {
             continue;
         }
-        let found = details::entries(&run.listed, run.entries.clone())
+        let entries = details::entries(&run.listed, run.entries.clone());
+        let found = entries
             .iter()
             .map(|entry| icons.of(&entry.name, entry.kind))
             .collect();
-        if shared.send(&run, read, found, events).is_err() {
+        let named = entries
+            .iter()
+            .map(|entry| icons.kind_name(&entry.name, entry.kind))
+            .collect();
+        if shared.send(&run, read, (found, named), events).is_err() {
             return;
         }
     }
@@ -335,7 +341,7 @@ mod tests {
             .send(
                 &run_of_another_listing(0..1),
                 vec![Details::default()],
-                Vec::new(),
+                (Vec::new(), Vec::new()),
                 &sink,
             )
             .ok();
