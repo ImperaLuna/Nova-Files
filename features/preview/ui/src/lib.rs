@@ -29,7 +29,7 @@ use looks::{
     DEFAULT_FIT, QuickLook, QuickLooks, Shown, moved, render_image, render_moving, without_pixels,
 };
 use pages::{Layout, Pages, Scroll};
-use player::Media;
+use player::{Media, State};
 
 pub struct PreviewPart {
     host: Host,
@@ -371,6 +371,7 @@ impl PreviewPart {
         };
         let at = self
             .shown_media()
+            .filter(|media| media.state != State::Ended)
             .map(|media| media.at)
             .filter(|at| !at.is_zero());
         let path = self.entry_path(listing, entry, cx);

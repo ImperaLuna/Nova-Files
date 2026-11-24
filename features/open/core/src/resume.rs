@@ -1,9 +1,11 @@
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsString;
 use std::path::Path;
 use std::time::Duration;
 
-const FILE_URI: &str = "file://";
-const END_OF_OPTIONS: &str = "--";
+use nova_files_api::uri::file_uri;
+
+const BEFORE_FILES: [&str; 3] = ["--", "@@u", "@@"];
+const DESKTOP: &str = ".desktop";
 
 enum Start {
     Joined(&'static str),
@@ -28,13 +30,19 @@ pub fn starting_at(
     at: Duration,
 ) -> Vec<OsString> {
     let id = app_id.to_ascii_lowercase();
-    let Some((_, start)) = PLAYERS.iter().find(|(name, _)| id.contains(name)) else {
+    let id = id.strip_suffix(DESKTOP).unwrap_or(&id);
+    let name = id.rsplit('.').next().unwrap_or(id);
+    let Some((_, start)) = PLAYERS.iter().find(|(player, _)| *player == name) else {
         return line;
     };
-    let Some(mut place) = line.iter().position(|word| names(word, file)) else {
+    let uri = file_uri(file);
+    let Some(mut place) = line
+        .iter()
+        .position(|word| word == file.as_os_str() || *word == *uri)
+    else {
         return line;
     };
-    if place > 0 && line[place - 1] == END_OF_OPTIONS {
+    while place > 0 && BEFORE_FILES.iter().any(|word| line[place - 1] == **word) {
         place -= 1;
     }
     let words = match start {
@@ -46,17 +54,6 @@ pub fn starting_at(
     };
     line.splice(place..place, words);
     line
-}
-
-fn names(word: &OsStr, file: &Path) -> bool {
-    word == file.as_os_str()
-        || word.to_str().is_some_and(|word| {
-            word.starts_with(FILE_URI)
-                && file
-                    .file_name()
-                    .and_then(OsStr::to_str)
-                    .is_some_and(|name| word.ends_with(name))
-        })
 }
 
 #[cfg(test)]
@@ -127,10 +124,53 @@ mod tests {
     }
 
     #[test]
+    fn a_flatpak_line_or_a_name_with_spaces_still_starts_there() {
+        let line = [
+            "flatpak",
+            "run",
+            "--file-forwarding",
+            "io.mpv.Mpv",
+            "--",
+            "@@u",
+            "file:///v/My%20Film.mkv",
+            "@@",
+        ]
+        .map(OsString::from)
+        .to_vec();
+        let started: Vec<String> = starting_at(
+            "io.mpv.Mpv.desktop",
+            line,
+            Path::new("/v/My Film.mkv"),
+            Duration::from_secs(2),
+        )
+        .into_iter()
+        .map(|word| word.into_string().unwrap_or_default())
+        .collect();
+        assert_eq!(
+            started,
+            [
+                "flatpak",
+                "run",
+                "--file-forwarding",
+                "io.mpv.Mpv",
+                "--start=2.000",
+                "--",
+                "@@u",
+                "file:///v/My%20Film.mkv",
+                "@@",
+            ]
+        );
+    }
+
+    #[test]
     fn another_app_or_a_line_without_the_file_is_left_as_it_is() {
         assert_eq!(
             started("org.kde.haruna.desktop", &["haruna", "/v/film.mkv"]),
             ["haruna", "/v/film.mkv"]
+        );
+        assert_eq!(
+            started("io.github.GnomeMpv.desktop", &["gnome-mpv", "/v/film.mkv"]),
+            ["gnome-mpv", "/v/film.mkv"]
         );
         assert_eq!(started("mpv.desktop", &["mpv"]), ["mpv"]);
     }
