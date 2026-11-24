@@ -71,34 +71,46 @@ spec!(
 );
 spec!(CURSOR_FIRST, CursorFirst, "cursor.first", "First", ["home"]);
 spec!(CURSOR_LAST, CursorLast, "cursor.last", "Last", ["end"]);
-spec!(RING_UP, RingUp, "ring.up", "Ring to previous", ["ctrl-up"]);
+spec!(
+    RING_UP,
+    RingUp,
+    "ring.up",
+    "Move up without selecting",
+    ["ctrl-up"]
+);
 spec!(
     RING_DOWN,
     RingDown,
     "ring.down",
-    "Ring to next",
+    "Move down without selecting",
     ["ctrl-down"]
 );
-spec!(RING_LEFT, RingLeft, "ring.left", "Ring left", ["ctrl-left"]);
+spec!(
+    RING_LEFT,
+    RingLeft,
+    "ring.left",
+    "Move left without selecting",
+    ["ctrl-left"]
+);
 spec!(
     RING_RIGHT,
     RingRight,
     "ring.right",
-    "Ring right",
+    "Move right without selecting",
     ["ctrl-right"]
 );
 spec!(
     RING_FIRST,
     RingFirst,
     "ring.first",
-    "Ring to first",
+    "Move to first without selecting",
     ["ctrl-home"]
 );
 spec!(
     RING_LAST,
     RingLast,
     "ring.last",
-    "Ring to last",
+    "Move to last without selecting",
     ["ctrl-end"]
 );
 spec!(RELOAD, Reload, "go.reload", "Reload", ["f5", "ctrl-r"]);
