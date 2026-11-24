@@ -1,6 +1,6 @@
 use gpui::{
     AnyElement, BoxShadow, ClickEvent, Context, Div, Entity, Hsla, InteractiveElement as _,
-    IntoElement, MouseButton, MouseDownEvent, ParentElement as _, SharedString, Stateful,
+    IntoElement, MouseButton, MouseDownEvent, ParentElement as _, Pixels, SharedString, Stateful,
     StatefulInteractiveElement as _, Styled, deferred, div, point, prelude::FluentBuilder as _, px,
 };
 
@@ -12,6 +12,15 @@ use crate::theme::{Colors, radius, size, text};
 use crate::window::MainWindow;
 
 const SHORTCUTS_PRIORITY: usize = 2;
+const SHORTCUTS_WIDTH: Pixels = px(520.0);
+const SHORTCUTS_TOP: Pixels = px(56.0);
+const SHORTCUTS_LIST_HEIGHT: Pixels = px(420.0);
+const SHORTCUTS_FIELD_HEIGHT: Pixels = px(44.0);
+const SHORTCUTS_HEAD_TOP: Pixels = px(10.0);
+const KEY_CAP_HEIGHT: Pixels = px(20.0);
+const KEY_CAP_PAD: Pixels = px(6.0);
+const KEY_CAP_GAP: Pixels = px(3.0);
+const KEY_CHOICE_GAP: Pixels = px(6.0);
 const KEY_CHOICE: &str = "or";
 
 impl MainWindow {
@@ -27,7 +36,7 @@ impl MainWindow {
             deferred(
                 div()
                     .absolute()
-                    .top(size::SHORTCUTS_TOP)
+                    .top(SHORTCUTS_TOP)
                     .left_0()
                     .right_0()
                     .px(size::MENU_EDGE)
@@ -62,7 +71,7 @@ impl MainWindow {
                                     .flex()
                                     .flex_col()
                                     .gap(size::MENU_ITEM_GAP)
-                                    .max_h(size::SHORTCUTS_LIST_HEIGHT)
+                                    .max_h(SHORTCUTS_LIST_HEIGHT)
                                     .overflow_y_scroll()
                                     .track_scroll(scroll)
                                     .p(size::MENU_PAD)
@@ -102,7 +111,7 @@ fn field_bar(field: &Entity<TextField>, colors: &Colors) -> Div {
         .flex_none()
         .items_center()
         .gap(size::SEARCH_GAP)
-        .h(size::SHORTCUTS_FIELD_HEIGHT)
+        .h(SHORTCUTS_FIELD_HEIGHT)
         .px(size::SEARCH_PAD)
         .border_b(size::LINE)
         .border_color(colors.line)
@@ -117,7 +126,7 @@ fn card(colors: &Colors) -> Stateful<Div> {
         .occlude()
         .flex()
         .flex_col()
-        .w(size::SHORTCUTS_WIDTH)
+        .w(SHORTCUTS_WIDTH)
         .max_w_full()
         .rounded(radius::CARD)
         .border(size::LINE)
@@ -136,7 +145,7 @@ fn card(colors: &Colors) -> Stateful<Div> {
 fn group_head(label: &'static str, colors: &Colors) -> Div {
     div()
         .flex_none()
-        .pt(size::SHORTCUTS_HEAD_TOP)
+        .pt(SHORTCUTS_HEAD_TOP)
         .pb(size::MENU_LINE_Y)
         .px(size::MENU_ITEM_PAD)
         .text_size(text::LABEL)
@@ -208,11 +217,7 @@ fn key_choices(keys: &[SharedString], runs: bool, colors: &Colors) -> Div {
     } else {
         colors.text_faint
     };
-    let mut row = div()
-        .flex()
-        .flex_none()
-        .items_center()
-        .gap(size::KEY_CHOICE_GAP);
+    let mut row = div().flex().flex_none().items_center().gap(KEY_CHOICE_GAP);
     for (index, keys) in keys.iter().enumerate() {
         if index > 0 {
             row = row.child(
@@ -224,7 +229,7 @@ fn key_choices(keys: &[SharedString], runs: bool, colors: &Colors) -> Div {
             );
         }
         row = row.child(
-            div().flex().gap(size::KEY_CAP_GAP).children(
+            div().flex().gap(KEY_CAP_GAP).children(
                 keys.split(' ')
                     .map(|key| key_cap(SharedString::from(key.to_owned()), tint, colors)),
             ),
@@ -238,9 +243,9 @@ fn key_cap(key: SharedString, tint: gpui::Rgba, colors: &Colors) -> Div {
         .flex()
         .items_center()
         .justify_center()
-        .h(size::KEY_CAP_HEIGHT)
-        .min_w(size::KEY_CAP_HEIGHT)
-        .px(size::KEY_CAP_PAD)
+        .h(KEY_CAP_HEIGHT)
+        .min_w(KEY_CAP_HEIGHT)
+        .px(KEY_CAP_PAD)
         .rounded(radius::SMALL)
         .bg(colors.press)
         .text_size(text::LABEL)
