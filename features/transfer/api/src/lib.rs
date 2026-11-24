@@ -36,6 +36,20 @@ pub struct MoveJob {
     pub into: PathBuf,
 }
 
+/// Make a symbolic link in the folder `into` to each of `sources`, under
+/// the source's name, or `Link to <name>` beside the source itself. A name
+/// already taken gets a keep-both number; nothing is replaced.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LinkJob {
+    pub sources: Vec<PathBuf>,
+    pub into: PathBuf,
+}
+
+/// The job that links `sources` into `into`.
+pub fn link(sources: Vec<PathBuf>, into: PathBuf) -> Operation {
+    Operation::feature(LinkJob { sources, into })
+}
+
 /// The job that copies `sources` into `into`.
 pub fn copy(sources: Vec<PathBuf>, into: PathBuf) -> Operation {
     Operation::feature(CopyJob { sources, into })
@@ -88,10 +102,12 @@ pub enum Event {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct DropAskId(pub u64);
 
-/// What dropping files on a folder does when no key picks: a move when
-/// every file is on the folder's drive, a copy otherwise.
+/// What dropping files on a folder does: a move when every file is on
+/// the folder's drive, a copy otherwise. Only a key held picks a link;
+/// [`Event::DropWould`] never answers one.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DropKind {
     Move,
     Copy,
+    Link,
 }

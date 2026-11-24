@@ -42,6 +42,7 @@ gpui::actions!(
         NewFolder,
         NewFile,
         Duplicate,
+        MakeLink,
         Undo,
         TogglePreview,
         PreviewPrevious,
