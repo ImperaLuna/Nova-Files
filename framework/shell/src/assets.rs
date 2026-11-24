@@ -55,10 +55,11 @@ pub enum Icon {
     NewFile,
     Duplicate,
     Link,
+    Lock,
 }
 
 impl Icon {
-    const ALL: [Self; 49] = [
+    const ALL: [Self; 50] = [
         Self::Folder,
         Self::File,
         Self::FileText,
@@ -102,6 +103,7 @@ impl Icon {
         Self::NewFolder,
         Self::Undo,
         Self::Info,
+        Self::Lock,
         Self::Person,
         Self::CopyPath,
         Self::Terminal,
@@ -155,6 +157,7 @@ impl Icon {
             Self::NewFolder => "icons/new-folder.svg",
             Self::Undo => "icons/undo.svg",
             Self::Info => "icons/info.svg",
+            Self::Lock => "icons/lock.svg",
             Self::Person => "icons/person.svg",
             Self::CopyPath => "icons/copy-path.svg",
             Self::Terminal => "icons/terminal.svg",
@@ -209,6 +212,7 @@ impl Icon {
             Self::NewFolder => svg::NEW_FOLDER,
             Self::Undo => svg::UNDO,
             Self::Info => svg::INFO,
+            Self::Lock => svg::LOCK,
             Self::Person => svg::PERSON,
             Self::CopyPath => svg::COPY_PATH,
             Self::Terminal => svg::TERMINAL,

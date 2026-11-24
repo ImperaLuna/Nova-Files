@@ -3,27 +3,30 @@
 mod code;
 mod draw;
 mod looks;
+mod pages;
 
 use std::mem;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use gpui::{AnyElement, App, Context, Pixels, RenderImage, Size, Subscription, Window};
-use nova_files_api::{Entry, EntryId, Fit, Listing, ListingId};
+use nova_files_api::{Entry, EntryId, Fit, Listing, ListingId, Picture};
 use nova_files_preview_api::{Command, Event, Preview, PreviewContent, PreviewId};
 use nova_files_shell::actions::{
-    ClearSelection, CursorDown, CursorUp, DeleteSelected, Duplicate, MakeLink, NewFile, NewFolder,
-    OpenSelected, PreviewNext, PreviewPrevious, RenameSelected, TogglePreview, TrashSelected, Undo,
+    ClearSelection, CursorDown, CursorFirst, CursorLast, CursorPageDown, CursorPageUp, CursorUp,
+    DeleteSelected, Duplicate, MakeLink, NewFile, NewFolder, OpenSelected, PreviewNext,
+    PreviewPrevious, RenameSelected, TogglePreview, TrashSelected, Undo,
 };
 use nova_files_shell::device::device_side;
 use nova_files_shell::theme::Colors;
 use nova_files_shell::{Entries, Host, Move, NavEvent, Part, Scene, Showing, Slots, Staged};
 
-use draw::{meta, room};
+use draw::{about, room};
 pub use looks::Previewed;
 use looks::{
     DEFAULT_FIT, QuickLook, QuickLooks, Shown, moved, render_image, render_moving, without_pixels,
 };
+use pages::{Layout, Pages, Scroll};
 
 pub struct PreviewPart {
     host: Host,
@@ -64,6 +67,7 @@ impl PreviewPart {
         let scale_factor = window.scale_factor();
         if !self.previewing() {
             self.set_room(room, scale_factor, cx);
+            self.want_pages(room, scale_factor, cx);
         }
         let cursor = self.host.entries.read(cx).cursor();
         if let Some(cursor) = cursor {
@@ -74,8 +78,7 @@ impl PreviewPart {
         let entry = entry_at(listing, open.entry)?;
         let about = open
             .current()
-            .and_then(|shown| shown.preview.as_deref())
-            .map(meta)
+            .map(|shown| about(shown, room))
             .unwrap_or_default();
         Some(Staged {
             entry: open.entry,
@@ -95,6 +98,9 @@ impl PreviewPart {
         let scale_factor = window.scale_factor();
         if scene.showing != Showing::Gallery || self.previewing() {
             self.set_room(room, scale_factor, cx);
+        }
+        if self.previewing() {
+            self.want_pages(room, scale_factor, cx);
         }
         let open = self.looks.open.as_ref().filter(|_| self.previewing())?;
         let listing = self
@@ -144,6 +150,7 @@ impl PreviewPart {
             width: device(room.width),
             height: device(room.height),
         });
+        self.looks.room = Some((room, scale_factor));
         if self.looks.fit == fit {
             return;
         }
@@ -186,7 +193,7 @@ impl PreviewPart {
     fn close(&mut self, cx: &mut Context<Self>) {
         self.looks.docked = false;
         if let Some(open) = self.looks.open.take() {
-            release(open.shown.and_then(|shown| shown.picture), cx);
+            release(open.shown.into_iter().flat_map(Shown::images), cx);
             self.host.link.send(Command::Closed).ok();
             cx.notify();
         }
@@ -217,6 +224,112 @@ impl PreviewPart {
 
     fn down(&mut self, _: &CursorDown, _: &mut Window, cx: &mut Context<Self>) -> bool {
         self.step(Move::Down, cx)
+    }
+
+    fn page_up(&mut self, _: &CursorPageUp, _: &mut Window, cx: &mut Context<Self>) -> bool {
+        self.scroll_pages(Scroll::Up, cx)
+    }
+
+    fn page_down(&mut self, _: &CursorPageDown, _: &mut Window, cx: &mut Context<Self>) -> bool {
+        self.scroll_pages(Scroll::Down, cx)
+    }
+
+    fn first_page(&mut self, _: &CursorFirst, _: &mut Window, cx: &mut Context<Self>) -> bool {
+        self.scroll_pages(Scroll::First, cx)
+    }
+
+    fn last_page(&mut self, _: &CursorLast, _: &mut Window, cx: &mut Context<Self>) -> bool {
+        self.scroll_pages(Scroll::Last, cx)
+    }
+
+    fn scroll_pages(&mut self, to: Scroll, cx: &mut Context<Self>) -> bool {
+        if !self.previewing() {
+            return false;
+        }
+        let Some((room, _)) = self.looks.room else {
+            return false;
+        };
+        let Some(pages) = self.shown_pages() else {
+            return false;
+        };
+        pages.scroll(to, room);
+        cx.notify();
+        true
+    }
+
+    fn shown_pages(&mut self) -> Option<&mut Pages> {
+        let open = self.looks.open.as_mut()?;
+        let (entry, asked) = (open.entry, open.asked);
+        open.shown
+            .as_mut()
+            .filter(|shown| shown.entry == entry)?
+            .pages
+            .as_mut()
+            .filter(|pages| pages.id == asked)
+    }
+
+    fn want_pages(&mut self, room: Size<Pixels>, scale_factor: f32, cx: &mut Context<Self>) {
+        let link = self.host.link.clone();
+        let Some(pages) = self.shown_pages() else {
+            return;
+        };
+        let layout = Layout::of(&pages.sizes, room);
+        let near = layout.near(pages.scrolled(), room.height);
+        let width = device_side(layout.width, scale_factor);
+        let far: Vec<usize> = pages
+            .asked
+            .iter()
+            .copied()
+            .filter(|index| !near.contains(index))
+            .collect();
+        let mut gone = Vec::new();
+        for index in far {
+            pages.asked.remove(&index);
+            gone.extend(pages.drawn.remove(&index));
+        }
+        let id = pages.id;
+        for index in near {
+            if pages.asked.insert(index) {
+                link.send(Command::Page { id, index, width }).ok();
+            }
+        }
+        release(gone, cx);
+    }
+
+    fn page_arrived(
+        &mut self,
+        id: PreviewId,
+        index: usize,
+        picture: Option<Picture>,
+        cx: &Context<Self>,
+    ) {
+        let wanted = |this: &mut Self| {
+            this.shown_pages()
+                .is_some_and(|pages| pages.id == id && pages.asked.contains(&index))
+        };
+        let Some(picture) = picture.filter(|_| wanted(self)) else {
+            return;
+        };
+        let converting = cx
+            .background_executor()
+            .spawn(async move { render_image(&picture) });
+        cx.spawn(async move |this, cx| {
+            let Some(image) = converting.await.map(Arc::new) else {
+                return;
+            };
+            this.update(cx, |this, cx| {
+                let replaced = match this.shown_pages() {
+                    Some(pages) if pages.id == id && pages.asked.contains(&index) => {
+                        pages.drawn.insert(index, image)
+                    }
+                    _ => Some(image),
+                };
+                release(replaced, cx);
+                cx.notify();
+            })
+            .ok();
+        })
+        .detach();
     }
 
     fn enter(&mut self, _: &OpenSelected, _: &mut Window, cx: &mut Context<Self>) -> bool {
@@ -323,7 +436,7 @@ impl PreviewPart {
         cx: &mut Context<Self>,
     ) {
         let Some(path) = self.entry_path(listing, entry, cx) else {
-            release(shown.and_then(|shown| shown.picture), cx);
+            release(shown.into_iter().flat_map(Shown::images), cx);
             cx.notify();
             return;
         };
@@ -357,7 +470,7 @@ impl PreviewPart {
         match event {
             Event::Previewed { id, preview } => self.preview_arrived(id, Some(preview), cx),
             Event::Unreadable { id, .. } => self.preview_arrived(id, None, cx),
-            Event::Paged { .. } => {}
+            Event::Paged { id, index, picture } => self.page_arrived(id, index, picture, cx),
         }
     }
 
@@ -415,14 +528,19 @@ impl PreviewPart {
             }
             _ => None,
         };
+        let pages = match preview.as_deref().map(|preview| &preview.content) {
+            Some(PreviewContent::Document { pages }) => Some(Pages::new(id, Arc::clone(pages))),
+            _ => None,
+        };
         let shown = Shown {
             entry: open.entry,
             preview,
             picture,
             code,
+            pages,
         };
         let before = open.shown.replace(shown);
-        release(before.and_then(|before| before.picture), cx);
+        release(before.into_iter().flat_map(Shown::images), cx);
         cx.notify();
     }
 }
@@ -484,6 +602,10 @@ impl Part for PreviewPart {
         slots.before(Self::next);
         slots.before(Self::up);
         slots.before(Self::down);
+        slots.before(Self::page_up);
+        slots.before(Self::page_down);
+        slots.before(Self::first_page);
+        slots.before(Self::last_page);
         slots.before(Self::enter);
         slots.before(Self::escape);
         slots.before(Self::holds::<TrashSelected>);

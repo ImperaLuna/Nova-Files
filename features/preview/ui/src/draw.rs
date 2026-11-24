@@ -19,6 +19,7 @@ use nova_files_shell::widgets::{icon, icon_button, kind_icon};
 use crate::PreviewPart;
 use crate::code::{self, Coded};
 use crate::looks::{QuickLook, Shown};
+use crate::pages::{Layout, Pages};
 
 const SEPARATOR: &str = " · ";
 const FILE_KIND: &str = "File";
@@ -27,6 +28,8 @@ const ITEM: &str = "item";
 const ITEMS: &str = "items";
 const MORE: &str = "more";
 const OPEN_LABEL: &str = "Open";
+const PAGE: &str = "Page";
+const OF: &str = "of";
 const BOTH_SIDES: f32 = 2.0;
 const CODE_WIDTH: Pixels = px(720.0);
 const CODE_PAD_X: Pixels = px(18.0);
@@ -49,7 +52,7 @@ pub fn layer(
     cx: &Context<PreviewPart>,
 ) -> AnyElement {
     let colors = Colors::of(cx);
-    let current = open.current().and_then(|shown| shown.preview.as_deref());
+    let current = open.current().map(|shown| about(shown, room));
     let art = stage_art(open, listing, entry, (room, scale_factor), &colors);
     let (previous, next) = steps(index, listing.entries.len());
     div()
@@ -149,8 +152,61 @@ fn art(
             |coded| code_art(coded, room, colors).into_any_element(),
         ),
         (PreviewContent::Folder { first, count }, _) => folder_art(first, *count, colors),
+        (PreviewContent::Document { .. }, _) => shown.pages.as_ref().map_or_else(
+            || big_icon(name, kind, colors),
+            |pages| pages_art(pages, room, colors),
+        ),
+        (PreviewContent::Locked, _) => locked_art(colors),
         _ => big_icon(name, kind, colors),
     }
+}
+
+fn pages_art(pages: &Pages, room: gpui::Size<Pixels>, colors: &Colors) -> AnyElement {
+    let layout = Layout::of(&pages.sizes, room);
+    let near = layout.near(pages.scrolled(), room.height);
+    div()
+        .id("preview-pages")
+        .debug_selector(|| "preview-pages".to_owned())
+        .w(layout.width)
+        .h(room.height.min(layout.total))
+        .overflow_y_scroll()
+        .track_scroll(&pages.scroll)
+        .child(
+            div()
+                .relative()
+                .w_full()
+                .h(layout.total)
+                .children(near.map(|index| {
+                    div()
+                        .absolute()
+                        .top(layout.tops[index])
+                        .left_0()
+                        .w_full()
+                        .h(layout.heights[index])
+                        .overflow_hidden()
+                        .rounded(radius::ROW)
+                        .border(size::LINE)
+                        .border_color(colors.line)
+                        .bg(colors.raised)
+                        .children(pages.drawn.get(&index).map(|page| {
+                            img(Arc::clone(page))
+                                .debug_selector(|| "preview-page".to_owned())
+                                .size_full()
+                        }))
+                })),
+        )
+        .into_any_element()
+}
+
+fn locked_art(colors: &Colors) -> AnyElement {
+    card(preview::CARD_WIDTH, colors)
+        .debug_selector(|| "preview-locked".to_owned())
+        .h(preview::CARD_HEIGHT)
+        .bg(colors.window)
+        .items_center()
+        .justify_center()
+        .child(icon(Icon::Lock, preview::BIG_ICON, colors.text_dim))
+        .into_any_element()
 }
 
 fn picture_art(
@@ -362,7 +418,7 @@ fn big_icon(name: &OsStr, kind: EntryKind, colors: &Colors) -> AnyElement {
 
 fn caption(
     entry: &Entry,
-    current: Option<&Preview>,
+    current: Option<String>,
     colors: &Colors,
     cx: &Context<PreviewPart>,
 ) -> impl IntoElement {
@@ -396,11 +452,11 @@ fn caption(
                         .font_weight(text::STRONG_WEIGHT)
                         .child(name),
                 )
-                .children(current.map(|preview| {
+                .children(current.map(|about| {
                     div()
                         .flex_none()
                         .text_color(colors.text_soft)
-                        .child(format!("{SEPARATOR}{}", meta(preview)))
+                        .child(format!("{SEPARATOR}{about}"))
                 })),
         )
         .child(
@@ -443,7 +499,21 @@ fn caption(
         )
 }
 
-pub fn meta(preview: &Preview) -> String {
+pub fn about(shown: &Shown, room: gpui::Size<Pixels>) -> String {
+    let Some(preview) = shown.preview.as_deref() else {
+        return String::new();
+    };
+    shown.pages.as_ref().map_or_else(
+        || meta(preview),
+        |pages| {
+            let reading = pages.reading(room) + 1;
+            let count = pages.sizes.len();
+            format!("{}{SEPARATOR}{PAGE} {reading} {OF} {count}", meta(preview))
+        },
+    )
+}
+
+fn meta(preview: &Preview) -> String {
     if let PreviewContent::Folder { count, .. } = &preview.content {
         let unit = if *count == 1 { ITEM } else { ITEMS };
         return format!("{FOLDER_KIND}{SEPARATOR}{count} {unit}");

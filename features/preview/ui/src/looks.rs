@@ -1,11 +1,12 @@
 use std::sync::Arc;
 
-use gpui::RenderImage;
+use gpui::{Pixels, RenderImage, Size};
 use image::{Delay, Frame, RgbaImage};
 use nova_files_api::{EntryId, Fit, ListingId, Picture};
 use nova_files_preview_api::{Frame as MovingFrame, Preview, PreviewContent, PreviewId};
 
 use crate::code::Coded;
+use crate::pages::Pages;
 
 // GPUI draws images in BGRA order.
 // https://github.com/ImperaLuna/zed/tree/47424cdc3f1a49829960e1ecbcdcdd967d034265/crates/gpui
@@ -22,6 +23,7 @@ pub const DEFAULT_FIT: Fit = Fit {
 pub struct QuickLooks {
     pub open: Option<QuickLook>,
     pub fit: Option<Fit>,
+    pub room: Option<(Size<Pixels>, f32)>,
     pub docked: bool,
     next_id: u64,
 }
@@ -53,6 +55,15 @@ pub struct Shown {
     pub preview: Option<Arc<Preview>>,
     pub picture: Option<Arc<RenderImage>>,
     pub code: Option<Arc<Coded>>,
+    pub pages: Option<Pages>,
+}
+
+impl Shown {
+    pub fn images(self) -> impl Iterator<Item = Arc<RenderImage>> {
+        self.picture
+            .into_iter()
+            .chain(self.pages.into_iter().flat_map(Pages::images))
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -152,6 +163,7 @@ mod tests {
             preview: None,
             picture: None,
             code: None,
+            pages: None,
         };
         let moved_entry = |entry, from, to| moved(shown(entry), EntryId(from), EntryId(to)).entry;
         assert_eq!(moved_entry(2, 2, 5), EntryId(5));
