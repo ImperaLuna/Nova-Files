@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::mpsc;
 
@@ -135,21 +135,25 @@ fn a_status_header_that_names_no_branch_is_no_repo() {
     assert_eq!(parse(&unknown[..]), Some(branch("main", false, (0, 0))));
 }
 
+fn reading(folders: Vec<PathBuf>) -> (Reader, mpsc::Receiver<Event>) {
+    let (sender, answers) = mpsc::channel::<Event>();
+    let events: Arc<dyn EventSink> = Arc::new(sender);
+    let reader = Reader::default();
+    reader.read(ClientId(1), &events, folders);
+    (reader, answers)
+}
+
 #[test]
-fn each_asked_folder_is_answered_in_turn() {
+fn each_asked_folder_is_answered_in_turn_and_forgetting_ends_the_reading() {
     let root = TestFolder::new("git-reader");
     let repo = root.join("repo");
     committed(&repo);
     let plain = root.join("plain");
     fs::create_dir_all(&plain).unwrap();
-    let (sender, answers) = mpsc::channel::<Event>();
-    let events: Arc<dyn EventSink> = Arc::new(sender);
-    let reader = Reader::default();
-    reader.read(ClientId(1), &events, vec![repo.clone(), plain.clone()]);
-    drop(events);
-    let got: Vec<Event> = answers.iter().collect();
+    let (reader, answers) = reading(vec![repo.clone(), plain.clone()]);
+    let first: Vec<Event> = answers.iter().take(2).collect();
     assert_eq!(
-        got,
+        first,
         [
             Event::Repo {
                 folder: repo,
@@ -161,4 +165,60 @@ fn each_asked_folder_is_answered_in_turn() {
             },
         ]
     );
+    reader.forget(ClientId(1));
+    assert_eq!(answers.iter().count(), 0);
+}
+
+#[test]
+fn a_commit_or_a_new_branch_is_read_again() {
+    let root = TestFolder::new("git-follow");
+    let repo = root.join("repo");
+    committed(&repo);
+    fs::write(repo.join("kept.txt"), "two").unwrap();
+    let (reader, answers) = reading(vec![repo.clone()]);
+    let at = |repo: Option<Repo>| Event::Repo {
+        folder: root.join("repo"),
+        repo,
+    };
+    assert_eq!(
+        answers.recv().unwrap(),
+        at(Some(branch("main", true, (0, 0))))
+    );
+    git(&repo, &["commit", "--quiet", "-am", "second"]);
+    let clean = at(Some(branch("main", false, (0, 0))));
+    assert!(answers.iter().any(|event| event == clean));
+    git(&repo, &["checkout", "--quiet", "-b", "other"]);
+    let other = at(Some(branch("other", false, (0, 0))));
+    assert!(answers.iter().any(|event| event == other));
+    reader.forget(ClientId(1));
+}
+
+#[test]
+fn a_repo_whose_config_can_run_programs_is_not_read() {
+    let root = TestFolder::new("git-config-runs");
+    let repo = root.join("repo");
+    committed(&repo);
+    let ran = root.join("ran");
+    let config = repo.join(".git").join("config");
+    let mut text = fs::read_to_string(&config).unwrap();
+    let line = format!("[core]\n\tfsmonitor = \"touch {}\"\n", ran.display());
+    text.push_str(&line);
+    fs::write(&config, text).unwrap();
+    assert_eq!(repo_at(&repo), None);
+    assert!(!ran.exists());
+}
+
+#[test]
+fn config_that_names_a_program_is_found_in_any_spelling() {
+    use crate::repo_config::names_a_program;
+    assert!(!names_a_program(
+        "[core]\n\tbare = false\n[remote \"origin\"]\n\turl = x\n"
+    ));
+    assert!(names_a_program("[filter \"lfs\"]\n\tclean = x\n"));
+    assert!(names_a_program("[Filter.lfs]\nclean = x\n"));
+    assert!(names_a_program("[include]\npath = ../x\n"));
+    assert!(names_a_program("[includeIf \"gitdir:/x\"]\npath = y\n"));
+    assert!(names_a_program("[core]\n  FSMonitor=true\n"));
+    assert!(names_a_program("[core] attributesFile = x\n"));
+    assert!(!names_a_program("[user]\nfsmonitor = x\n"));
 }

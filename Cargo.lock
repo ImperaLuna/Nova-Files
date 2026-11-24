@@ -3674,6 +3674,7 @@ dependencies = [
  "nova-files-api",
  "nova-files-git-api",
  "nova-files-test-folder",
+ "rustix",
 ]
 
 [[package]]

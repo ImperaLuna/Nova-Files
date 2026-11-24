@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use gpui::prelude::FluentBuilder as _;
@@ -19,6 +19,7 @@ const BEHIND: char = '↓';
 
 #[derive(Default)]
 pub struct Repos {
+    listed: HashSet<PathBuf>,
     known: HashMap<PathBuf, Repo>,
 }
 
@@ -29,8 +30,18 @@ impl Repos {
             .iter()
             .map(|entry| listing.path_of(entry))
             .collect();
-        self.known.retain(|folder, _| folders.contains(folder));
+        self.listed = folders.iter().cloned().collect();
+        self.known.retain(|folder, _| self.listed.contains(folder));
         Command::Repos(folders)
+    }
+
+    pub fn leave(&mut self) -> Option<Command> {
+        if self.listed.is_empty() {
+            return None;
+        }
+        self.listed.clear();
+        self.known.clear();
+        Some(Command::Repos(Vec::new()))
     }
 
     pub fn heard(&mut self, event: Event) {
@@ -38,10 +49,10 @@ impl Repos {
             Event::Repo {
                 folder,
                 repo: Some(repo),
-            } => {
+            } if self.listed.contains(&folder) => {
                 self.known.insert(folder, repo);
             }
-            Event::Repo { folder, repo: None } => {
+            Event::Repo { folder, .. } => {
                 self.known.remove(&folder);
             }
         }

@@ -124,10 +124,14 @@ impl GatheredPart {
 
     fn listed(&mut self, listing: &Listing, reordered: bool, cx: &mut Context<Self>) {
         let scene = self.host.scene(cx);
-        let on_projects =
-            scene.on_page::<GatheredPage>() == Some(&GatheredPage::new(Gathering::Projects));
-        if on_projects && !reordered {
-            self.host.link.send(self.repos.ask(listing)).ok();
+        let projects = GatheredPage::new(Gathering::Projects);
+        let ask = if scene.on_page::<GatheredPage>() == Some(&projects) {
+            (!reordered).then(|| self.repos.ask(listing))
+        } else {
+            self.repos.leave()
+        };
+        if let Some(ask) = ask {
+            self.host.link.send(ask).ok();
         }
     }
 
