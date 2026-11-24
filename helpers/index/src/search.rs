@@ -1,18 +1,21 @@
 mod matching;
+mod terms;
 
 use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::num::NonZero;
 use std::ops::Range;
+use std::panic::resume_unwind;
 use std::path::{Path, PathBuf};
 use std::thread;
 
-use crate::RowId;
 use crate::fold;
 use crate::overlay::Overlay;
 use crate::reader::Index;
+use crate::{Kind, RowId};
 
 pub use matching::MatchKind;
+use terms::Terms;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Hit {
@@ -24,10 +27,9 @@ pub struct Search<'a> {
     index: &'a Index,
     overlay: Option<&'a Overlay>,
     added: Vec<&'a Path>,
-    words: Vec<Vec<u8>>,
+    terms: Terms,
     hidden_last: bool,
     limit: usize,
-    added_found: Vec<bool>,
     shown: HashSet<PathBuf>,
     within: Option<PathBuf>,
     rows: Range<u32>,
@@ -53,28 +55,59 @@ enum Source {
     Added(usize),
 }
 
-type Rank = (MatchKind, bool, usize, usize, Source);
+type Rank = (usize, MatchKind, bool, usize, usize, usize, Source);
 
 struct Scan<'a> {
     index: &'a Index,
-    words: &'a [Vec<u8>],
-    wanted: Vec<Wanted>,
+    terms: &'a Terms,
     loose: bool,
     all_hidden: bool,
     hidden_last: bool,
     keep: Option<usize>,
 }
 
-#[derive(Clone, Copy)]
-struct Wanted {
-    letters: u32,
-    may_miss: u32,
+struct Open {
+    ends: Vec<RowId>,
+    reach: Vec<u8>,
+    terms: usize,
 }
 
-fn wanted(word: &[u8], loose: bool) -> Wanted {
-    Wanted {
-        letters: fold::letters(word),
-        may_miss: u32::from(loose && word.len() >= matching::TYPO_MIN),
+impl Open {
+    fn above(scan: &Scan<'_>, first: RowId) -> Self {
+        let index = scan.index;
+        let mut open = Self {
+            ends: Vec::new(),
+            reach: vec![0; scan.terms.len()],
+            terms: scan.terms.len(),
+        };
+        let mut chain: Vec<RowId> =
+            std::iter::successors(index.parent(first), |&folder| index.parent(folder)).collect();
+        chain.pop();
+        for folder in chain.into_iter().rev() {
+            open.enter(scan, folder);
+        }
+        open
+    }
+
+    fn enter(&mut self, scan: &Scan<'_>, folder: RowId) {
+        let (Some(end), Some(name)) = (scan.index.end(folder), scan.index.folded(folder)) else {
+            return;
+        };
+        let from = self.reach.len() - self.terms;
+        self.reach.extend_from_within(from..);
+        scan.terms.enter(&mut self.reach[from + self.terms..], name);
+        self.ends.push(end);
+    }
+
+    fn leave_before(&mut self, row: RowId) {
+        while self.ends.last().is_some_and(|&end| end <= row) {
+            self.ends.pop();
+            self.reach.truncate(self.reach.len() - self.terms);
+        }
+    }
+
+    fn reach(&self) -> &[u8] {
+        &self.reach[self.reach.len() - self.terms..]
     }
 }
 
@@ -82,41 +115,50 @@ impl Scan<'_> {
     fn ranked(&self, rows: Range<u32>) -> Vec<Rank> {
         let index = self.index;
         let mut ranked = Vec::new();
+        let mut open = Open::above(self, RowId(rows.start));
         for row in rows.map(RowId) {
-            let Some(letters) = index.letters(row) else {
-                continue;
-            };
-            let short =
-                |wanted: &Wanted| (wanted.letters & !letters).count_ones() > wanted.may_miss;
-            if self.wanted.iter().any(short) {
-                continue;
+            open.leave_before(row);
+            if let Some(rank) = self.rank(row, &open) {
+                ranked.push(rank);
             }
-            let Some(folded) = index.folded(row) else {
-                continue;
-            };
-            let starts_word = |at| index.starts_word(row, at);
-            let Some(found) = matching::query(folded, self.words, self.loose, starts_word) else {
-                continue;
-            };
-            if self.loose && found.kind <= MatchKind::Contains {
-                continue;
-            }
-            let hidden = self.all_hidden || index.is_hidden(row);
-            ranked.push((
-                found.kind,
-                hidden && self.hidden_last,
-                found.cost,
-                folded.len(),
-                Source::Row(row),
-            ));
             if let Some(keep) = self.keep
                 && ranked.len() >= keep.saturating_mul(KEEP_SLACK).max(KEEP_MIN)
             {
                 ranked.select_nth_unstable(keep);
                 ranked.truncate(keep);
             }
+            if index.kind(row) == Some(Kind::Folder) {
+                open.enter(self, row);
+            }
         }
         ranked
+    }
+
+    fn rank(&self, row: RowId, open: &Open) -> Option<Rank> {
+        let index = self.index;
+        let reach = open.reach();
+        if !self
+            .terms
+            .could_meet(reach, index.letters(row)?, self.loose)
+        {
+            return None;
+        }
+        let folded = index.folded(row)?;
+        let starts_word = |at| index.starts_word(row, at);
+        let met = self.terms.meet(reach, folded, self.loose, starts_word)?;
+        if self.loose && !met.loosely {
+            return None;
+        }
+        let hidden = self.all_hidden || index.is_hidden(row);
+        Some((
+            met.by_folders,
+            met.found.kind,
+            hidden && self.hidden_last,
+            met.found.cost,
+            folded.len(),
+            open.ends.len(),
+            Source::Row(row),
+        ))
     }
 }
 
@@ -135,15 +177,8 @@ impl Index {
         limit: usize,
         overlay: Option<&'a Overlay>,
     ) -> Search<'a> {
-        let mut words: Vec<Vec<u8>> = Vec::new();
-        for word in query.split_whitespace() {
-            let mut folded = Vec::new();
-            fold::fold_into(word.as_bytes(), &mut folded);
-            if !folded.is_empty() {
-                words.push(folded);
-            }
-        }
-        let stage = if words.is_empty() || limit == 0 {
+        let terms = Terms::parse(query);
+        let stage = if terms.is_empty() || limit == 0 {
             Stage::Done
         } else {
             Stage::AsTyped
@@ -154,10 +189,9 @@ impl Index {
             added: overlay
                 .map(|overlay| overlay.added().collect())
                 .unwrap_or_default(),
-            words,
+            terms,
             hidden_last: !query.trim_start().starts_with('.'),
             limit,
-            added_found: Vec::new(),
             shown: HashSet::new(),
             within: None,
             rows: 1..self.rows(),
@@ -213,8 +247,7 @@ impl Search<'_> {
         let changed = self.overlay.is_some_and(|overlay| !overlay.is_empty());
         let scan = Scan {
             index,
-            words: &self.words,
-            wanted: self.words.iter().map(|word| wanted(word, loose)).collect(),
+            terms: &self.terms,
             loose,
             all_hidden: self
                 .within
@@ -248,23 +281,16 @@ impl Search<'_> {
                 .collect();
             running
                 .into_iter()
-                .flat_map(|part| part.join().unwrap_or_default())
+                .flat_map(|part| part.join().unwrap_or_else(|panic| resume_unwind(panic)))
                 .collect()
         })
     }
 
-    fn scan_added(&mut self, loose: bool) -> Vec<Rank> {
+    fn scan_added(&self, loose: bool) -> Vec<Rank> {
         let root = self.index.root();
         let mut ranked = Vec::new();
         let mut folded = Vec::new();
         for (at, &path) in self.added.iter().enumerate() {
-            if !loose {
-                self.added_found.push(false);
-            }
-            let seen = self.added_found.get_mut(at);
-            if loose && seen.as_deref() == Some(&true) {
-                continue;
-            }
             if self
                 .within
                 .as_deref()
@@ -275,20 +301,35 @@ impl Search<'_> {
             let Some(name) = path.file_name().map(OsStr::as_encoded_bytes) else {
                 continue;
             };
+            let mut reach = vec![0; self.terms.len()];
+            let above = path
+                .parent()
+                .and_then(|folder| folder.strip_prefix(root).ok());
+            let depth = above.map_or(0, |folders| {
+                folders
+                    .iter()
+                    .inspect(|folder| {
+                        fold::fold_into(folder.as_encoded_bytes(), &mut folded);
+                        self.terms.enter(&mut reach, &folded);
+                    })
+                    .count()
+            });
             fold::fold_into(name, &mut folded);
             let starts_word = |at| fold::starts_word(name, &folded, at);
-            let Some(found) = matching::query(&folded, &self.words, loose, starts_word) else {
+            let Some(met) = self.terms.meet(&reach, &folded, loose, starts_word) else {
                 continue;
             };
-            if let Some(seen) = seen {
-                *seen = true;
+            if loose && !met.loosely {
+                continue;
             }
             let hidden = is_hidden(root, path);
             ranked.push((
-                found.kind,
+                met.by_folders,
+                met.found.kind,
                 hidden && self.hidden_last,
-                found.cost,
+                met.found.cost,
                 folded.len(),
+                depth,
                 Source::Added(at),
             ));
         }
@@ -306,7 +347,7 @@ impl Search<'_> {
         }
         ranked.sort_unstable();
         let mut hits = Vec::new();
-        for (kind, .., source) in ranked {
+        for (_, kind, .., source) in ranked {
             if hits.len() == self.limit {
                 break;
             }
@@ -325,7 +366,7 @@ impl Search<'_> {
         let within = self.within.as_deref();
         let mut placed: Vec<(Rank, PathBuf)> = ranked
             .into_iter()
-            .filter_map(|(kind, _, cost, length, source)| {
+            .filter_map(|(by_folders, kind, _, cost, length, depth, source)| {
                 let path = self.path(source)?;
                 if within.is_some_and(|folder| !is_inside(&path, folder)) {
                     return None;
@@ -335,12 +376,15 @@ impl Search<'_> {
                 } else {
                     false
                 };
-                Some(((kind, hidden, cost, length, source), path))
+                Some((
+                    (by_folders, kind, hidden, cost, length, depth, source),
+                    path,
+                ))
             })
             .collect();
         placed.sort_unstable_by_key(|(rank, _)| *rank);
         let mut hits = Vec::new();
-        for ((kind, ..), path) in placed {
+        for ((_, kind, ..), path) in placed {
             if hits.len() == self.limit {
                 break;
             }

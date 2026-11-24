@@ -16,25 +16,6 @@ pub struct Found {
     pub cost: usize,
 }
 
-pub fn query(
-    folded: &[u8],
-    words: &[Vec<u8>],
-    loose: bool,
-    starts_word: impl Fn(usize) -> bool,
-) -> Option<Found> {
-    let mut all = Found {
-        kind: MatchKind::Exact,
-        cost: 0,
-    };
-    for word in words {
-        let found = exact(folded, word, &starts_word)
-            .or_else(|| loose.then(|| self::loose(folded, word)).flatten())?;
-        all.kind = all.kind.max(found.kind);
-        all.cost += found.cost;
-    }
-    Some(all)
-}
-
 pub fn exact(folded: &[u8], word: &[u8], starts_word: impl Fn(usize) -> bool) -> Option<Found> {
     let whole = folded == word;
     if whole || stem(folded) == Some(word) {
@@ -75,6 +56,10 @@ pub fn loose(folded: &[u8], word: &[u8]) -> Option<Found> {
 fn stem(folded: &[u8]) -> Option<&[u8]> {
     let dot = folded.iter().rposition(|&byte| byte == b'.')?;
     folded.get(..dot)
+}
+
+pub fn contains(folded: &[u8], word: &[u8]) -> bool {
+    occurrences(folded, word).next().is_some()
 }
 
 fn occurrences<'a>(folded: &'a [u8], query: &'a [u8]) -> impl Iterator<Item = usize> + 'a {
