@@ -325,7 +325,7 @@ fn a_part_opens_its_own_entries_and_the_rest_open_as_before(cx: &mut TestAppCont
         .into_iter()
         .filter_map(|command| match command {
             open_api::Command::OpenFile { path, .. } => Some(path),
-            open_api::Command::OpenWith(_) => None,
+            open_api::Command::OpenWith(_) | open_api::Command::OpenTerminal { .. } => None,
         })
         .collect();
     assert_eq!(OPENED.get(), 1);

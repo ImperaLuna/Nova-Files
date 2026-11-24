@@ -5,6 +5,7 @@ mod entry;
 mod exec;
 mod folders;
 mod mime;
+mod terminal;
 #[cfg(test)]
 mod tree;
 mod with;
@@ -24,6 +25,7 @@ use nova_files_open_api::{Event, TakeOut};
 
 pub use folders::{NotDefault, make_default_for_folders, opens_folders};
 pub use mime::{LazyMimes, MimeTypes};
+pub use terminal::open_terminal;
 pub use with::Worker as OpenWithWorker;
 
 const FLATPAK_INFO: &str = "/.flatpak-info";
@@ -32,6 +34,7 @@ const STARTUP_ID_VAR: &str = "DESKTOP_STARTUP_ID";
 const CURRENT_DESKTOP_VAR: &str = "XDG_CURRENT_DESKTOP";
 const DESKTOP_SEPARATOR: char = ':';
 const PATH_VAR: &str = "PATH";
+const PWD_VAR: &str = "PWD";
 const HOME_VAR: &str = "HOME";
 const CONFIG_HOME_VAR: &str = "XDG_CONFIG_HOME";
 const CONFIG_DIRS_VAR: &str = "XDG_CONFIG_DIRS";
@@ -191,7 +194,7 @@ fn prepare(
         command.env_remove(variable);
     }
     if let Some(dir) = working_dir {
-        command.current_dir(dir);
+        command.current_dir(dir).env(PWD_VAR, dir);
     }
     if let Some(token) = activation {
         command
@@ -388,6 +391,8 @@ mod tests {
                 icon: None,
                 working_dir: None,
                 terminal: false,
+                emulates_terminal: false,
+                listed: true,
             },
             file: PathBuf::from("/a.desktop"),
         };

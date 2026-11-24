@@ -51,10 +51,11 @@ pub enum Icon {
     Info,
     Person,
     CopyPath,
+    Terminal,
 }
 
 impl Icon {
-    const ALL: [Self; 45] = [
+    const ALL: [Self; 46] = [
         Self::Folder,
         Self::File,
         Self::FileText,
@@ -100,6 +101,7 @@ impl Icon {
         Self::Info,
         Self::Person,
         Self::CopyPath,
+        Self::Terminal,
     ];
 
     pub const fn path(self) -> &'static str {
@@ -149,6 +151,7 @@ impl Icon {
             Self::Info => "icons/info.svg",
             Self::Person => "icons/person.svg",
             Self::CopyPath => "icons/copy-path.svg",
+            Self::Terminal => "icons/terminal.svg",
         }
     }
 
@@ -199,6 +202,7 @@ impl Icon {
             Self::Info => svg::INFO,
             Self::Person => svg::PERSON,
             Self::CopyPath => svg::COPY_PATH,
+            Self::Terminal => svg::TERMINAL,
         };
         source.as_bytes()
     }
