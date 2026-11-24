@@ -30,7 +30,9 @@ pub enum ThumbnailsShown {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Resizable {
     Sidebar,
+    Part,
     Folder,
+    Kind,
     Modified,
     Size,
 }
@@ -39,7 +41,9 @@ impl Resizable {
     pub const fn name(self) -> &'static str {
         match self {
             Self::Sidebar => "sidebar",
+            Self::Part => "part",
             Self::Folder => "folder",
+            Self::Kind => "type",
             Self::Modified => "modified",
             Self::Size => "size",
         }

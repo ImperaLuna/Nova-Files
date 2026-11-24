@@ -6,6 +6,8 @@ use gpui::{
     Point, SharedString, Window, div, point,
 };
 use nova_files_shell::path_bar::Crumb;
+use nova_files_shell::theme::Colors;
+use nova_files_shell::widgets::detail;
 use nova_files_shell::{
     CardRank, Column, Host, Location, MenuAt, MenuGroup, MenuItem, PageKind, PageRef, Part, Parts,
     Placed, Scene, SidebarAt, SidebarRow, Slots, assets::Icon, command_spec,
@@ -127,7 +129,10 @@ impl Part for Shelf {
             scene.in_folder(Path::new(SHOWN)).then_some(Column {
                 head: "Shelf".into(),
                 selector: "head-shelf",
-                cell: |_, entry, _| Some(format!("cell-{}", entry.name.to_string_lossy()).into()),
+                cell: |_, entry, cx| {
+                    let text = format!("cell-{}", entry.name.to_string_lossy());
+                    Some(detail(text, &Colors::of(cx)).into_any_element())
+                },
             })
         });
         slots.sidebar(SidebarAt::Places, |_, scene, _| {

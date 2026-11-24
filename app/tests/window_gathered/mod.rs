@@ -1,7 +1,8 @@
 use gpui::point;
 use nova_files_api::{FolderSizes, SortKey};
 use nova_files_gathered_api::Gathering;
-use nova_files_gathered_ui::{GatheredPage, GatheredPart};
+use nova_files_gathered_ui::{BRANCH_HEAD, GatheredPage, GatheredPart};
+use nova_files_git_api::{Head, Repo};
 use nova_files_shell::PageRef;
 
 use super::*;
@@ -48,6 +49,7 @@ async fn projects_lists_the_folders_it_gathers_and_follows_them(cx: &mut TestApp
     });
     cx.run_until_parked();
     assert!(cx.debug_bounds("folder-header").is_some());
+    assert!(cx.debug_bounds(BRANCH_HEAD).is_some());
     assert!(cx.debug_bounds("place-projects-here").is_some());
 
     fs::create_dir(tree.path().join("Projects/bench")).unwrap();
@@ -56,6 +58,54 @@ async fn projects_lists_the_folders_it_gathers_and_follows_them(cx: &mut TestApp
 
     view.update_in(cx, |view, _, cx| view.go_back(cx));
     wait_for_folder(&view, cx, tree.path()).await;
+}
+
+fn git(folder: &Path, args: &[&str]) {
+    let ran = std::process::Command::new("git")
+        .args(["-c", "user.name=Test", "-c", "user.email=test@example.com"])
+        .args([
+            "-c",
+            "init.defaultBranch=main",
+            "-c",
+            "commit.gpgsign=false",
+        ])
+        .arg("-C")
+        .arg(folder)
+        .args(args)
+        .output()
+        .unwrap();
+    assert!(ran.status.success(), "git {args:?}: {ran:?}");
+}
+
+#[gpui::test]
+async fn each_project_shows_its_branch_and_whether_it_has_changes(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("gathered-branch");
+    let nova = tree.path().join("Projects/nova");
+    git(&nova, &["init", "--quiet"]);
+    git(
+        &nova,
+        &["commit", "--quiet", "--allow-empty", "-m", "first"],
+    );
+    git(&nova, &["checkout", "--quiet", "-b", "drag-out"]);
+    fs::write(nova.join("notes.txt"), "new").unwrap();
+    let (view, cx) = open_on(cx, tree.path()).await;
+
+    click(cx, "place-projects");
+
+    wait_for_place(&view, cx, Gathering::Projects, &["nova"]).await;
+    let changed = Repo {
+        head: Head::Branch("drag-out".to_owned()),
+        changed: true,
+        ahead: 0,
+        behind: 0,
+    };
+    view.condition::<WindowEvent>(cx, move |view, cx| {
+        gathered(view, cx).repo_of_row(0, cx).as_ref() == Some(&changed)
+    })
+    .await;
+    cx.run_until_parked();
+    assert!(cx.debug_bounds("changes-nova").is_some());
 }
 
 #[gpui::test]

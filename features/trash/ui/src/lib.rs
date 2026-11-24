@@ -6,10 +6,12 @@ use std::collections::{HashMap, HashSet};
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-use gpui::{App, Context, Modifiers, SharedString, Window};
+use gpui::{App, Context, IntoElement as _, Modifiers, SharedString, Window};
 use nova_files_api::{Entry, Event, JobId, Operation};
 use nova_files_shell::actions::TrashSelected;
 use nova_files_shell::assets::Icon;
+use nova_files_shell::theme::Colors;
+use nova_files_shell::widgets::detail;
 use nova_files_shell::{
     Column, DropOver, FolderName, FolderRules, Host, Location, Look, MenuAt, MenuGroup, MenuItem,
     Navigator, Part, Placed, Scene, SidebarAt, SidebarRow, Slots, command_spec,
@@ -347,7 +349,10 @@ impl Part for TrashPart {
             part.shown(scene).then_some(Column {
                 head: WAS_IN_LABEL.into(),
                 selector: WAS_IN_HEAD,
-                cell: |part, entry, _| part.was_in(entry),
+                cell: |part, entry, cx| {
+                    let was_in = part.was_in(entry)?;
+                    Some(detail(was_in, &Colors::of(cx)).into_any_element())
+                },
             })
         });
         slots.empty_note(|part, scene, _| {

@@ -28,6 +28,7 @@ struct State {
     from_files: Option<String>,
     by_type: HashMap<String, FileIcon>,
     files: HashMap<PathBuf, Arc<ThemeIcon>>,
+    names: HashMap<String, Option<Arc<str>>>,
 }
 
 impl FileIcons {
@@ -48,6 +49,7 @@ impl FileIcons {
                 from_files,
                 by_type: HashMap::new(),
                 files: HashMap::new(),
+                names: HashMap::new(),
             }),
         }
     }
@@ -101,6 +103,20 @@ impl FileIcons {
         by_type.insert(mime.to_owned(), icon.clone());
         icon
     }
+
+    pub fn kind_name(&self, name: &OsStr, kind: EntryKind) -> Option<Arc<str>> {
+        if kind == EntryKind::Folder {
+            return None;
+        }
+        let types = &*self.types;
+        let mime = types.of(name)?;
+        let mut state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
+        state
+            .names
+            .entry(mime.to_owned())
+            .or_insert_with(|| types.name(mime).map(Arc::from))
+            .clone()
+    }
 }
 
 fn read(files: &mut HashMap<PathBuf, Arc<ThemeIcon>>, path: PathBuf) -> Option<Arc<ThemeIcon>> {
@@ -133,6 +149,10 @@ fn read(files: &mut HashMap<PathBuf, Arc<ThemeIcon>>, path: PathBuf) -> Option<A
 impl nova_files_disk::ports::Icons for FileIcons {
     fn of(&self, name: &OsStr, kind: EntryKind) -> FileIcon {
         Self::of(self, name, kind)
+    }
+
+    fn kind_name(&self, name: &OsStr, kind: EntryKind) -> Option<Arc<str>> {
+        Self::kind_name(self, name, kind)
     }
 
     fn follow_desktop(&self, named: &[String]) {

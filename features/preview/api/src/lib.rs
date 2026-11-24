@@ -9,6 +9,7 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
 use nova_files_api::{Entry, Fit, Picture, Unreadable};
 
@@ -25,6 +26,18 @@ pub enum Command {
         path: PathBuf,
         fit: Fit,
     },
+    /// Draw page `index` of the PDF that [`Command::Preview`] `id` showed
+    /// as a [`PreviewContent::Document`], `width` pixels wide. The answer
+    /// is [`Event::Paged`] with the same `id` and `index`, unless a newer
+    /// preview has replaced `id`.
+    Page {
+        id: PreviewId,
+        index: usize,
+        width: u32,
+    },
+    /// The client no longer shows a quick look: the core lets go of what
+    /// it holds for the last preview, such as an open PDF.
+    Closed,
 }
 
 /// Something the preview feature's core half tells one client.
@@ -40,6 +53,13 @@ pub enum Event {
         id: PreviewId,
         path: PathBuf,
         reason: Unreadable,
+    },
+    /// Page `index` of preview `id`'s document, as [`Command::Page`] asked;
+    /// `None` when that page couldn't be drawn.
+    Paged {
+        id: PreviewId,
+        index: usize,
+        picture: Option<Picture>,
     },
 }
 
@@ -77,6 +97,10 @@ pub enum PreviewContent {
     /// A picture the core could decode, upright, scaled down to the
     /// request's [`Fit`].
     Picture(Picture),
+    /// A picture that moves (a GIF, or an animated WebP or PNG): its
+    /// frames in order, all one size, scaled down like a
+    /// [`PreviewContent::Picture`].
+    Moving(Vec<Frame>),
     /// The start of a text file, at most [`PREVIEW_TEXT_BYTES`]; `cut`
     /// when the file goes on past it.
     Text { text: Arc<str>, cut: bool },
@@ -88,6 +112,11 @@ pub enum PreviewContent {
         cut: bool,
         runs: Arc<[Run]>,
     },
+    /// A PDF: each page's size in points, in order. Its pages come one at a
+    /// time through [`Command::Page`].
+    Document { pages: Arc<[PageSize]> },
+    /// A PDF that needs a password to open.
+    Locked,
     /// A folder's first entries, folders first and A to Z, at most
     /// [`PREVIEW_ENTRIES`], and how many it holds in all.
     Folder { first: Vec<Entry>, count: usize },
@@ -117,4 +146,19 @@ pub enum Mark {
     Type,
     Tag,
     Attribute,
+}
+
+/// How big a page of a [`PreviewContent::Document`] is, in points (1/72
+/// inch).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PageSize {
+    pub width: u32,
+    pub height: u32,
+}
+
+/// One frame of a [`PreviewContent::Moving`] picture, shown for `delay`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Frame {
+    pub picture: Picture,
+    pub delay: Duration,
 }

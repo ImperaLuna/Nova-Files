@@ -4,8 +4,10 @@
 # exits.
 #
 # Allowed outside crates:
+# - hayro
 # - image
 # - landlock
+# - resvg
 # - rustix
 # Allowed workspace crates: none
 
@@ -21,10 +23,14 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+# Reads PDF pages in pure Rust, so a document needs nothing installed.
+hayro = "0.9.0"
 # Only the formats the helper decodes itself; the rest go to the system's
 # thumbnailers. GPUI already builds image with more formats.
-image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "webp"] }
+image = { version = "0.25.10", default-features = false, features = ["gif", "jpeg", "png", "webp"] }
 landlock = "0.4"
+# Draws SVG drawings at the quick look's size. GPUI already builds it.
+resvg = { version = "0.46.0", default-features = false, features = ["text", "system-fonts", "memmap-fonts"] }
 # Waits on the system thumbnailer itself, with a deadline (pidfd).
 rustix = { version = "1.1.6", default-features = false, features = ["event", "process", "std"] }
 

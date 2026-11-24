@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::env;
 use std::ffi::OsString;
@@ -130,6 +131,7 @@ pub fn arrange(
             SortKey::Name => left.name.cmp(&right.name),
             SortKey::Modified => left_details.modified.cmp(&right_details.modified),
             SortKey::Size => left_details.size.cmp(&right_details.size),
+            SortKey::Kind => Ordering::Equal,
         };
         let by_key = if order.descending {
             by_key.reverse()

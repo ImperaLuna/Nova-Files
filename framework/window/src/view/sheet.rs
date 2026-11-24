@@ -11,8 +11,8 @@ use nova_files_api::{Entry, EntryId, Listing, ListingId, Order, SortKey};
 
 use super::drop::inside_edge;
 use super::row::{
-    ColumnWidths, Corners, cells, cursor_ring, detail, drags, entry_icon, entry_name, folder_aim,
-    icon, share_cell,
+    ColumnWidths, Corners, Middle, cells, cursor_ring, detail, drags, entry_icon, entry_name,
+    folder_aim, icon, share_cell,
 };
 
 use nova_files_shell::{Allow, PageRef, Resizable, ShownColumn};
@@ -24,6 +24,7 @@ use crate::window::{Aim, MainWindow};
 use nova_files_shell::Grid;
 
 const NAME_LABEL: &str = "Name";
+const KIND_LABEL: &str = "Type";
 const MODIFIED_LABEL: &str = "Modified";
 const SIZE_LABEL: &str = "Size";
 const FOLDER_LABEL: &str = "Folder";
@@ -171,15 +172,17 @@ impl MainWindow {
                             .as_deref()
                             .map(|query| marks::matched(&name, query))
                             .unwrap_or_default();
-                        let folder =
-                            this.folder_cell(listing, (entry, index), part_column.as_ref(), cx);
+                        let middle = this.middle(part_column.as_ref(), listing, (entry, index), cx);
                         let on = selected(index);
                         let corners = Corners::of(index, selected);
                         let folder_at = folder_aim(listing, entry, &name);
                         let line = cells(
                             this.name_cell(entry, ((listing_id, id), index), (name, marks), cx),
-                            folder,
-                            detail(columns.modified, &colors),
+                            middle,
+                            (
+                                detail(columns.kind, &colors),
+                                detail(columns.modified, &colors),
+                            ),
                             (this.size_cell(index, columns.size, &colors), widths),
                             format!("modified-{index}"),
                         );
@@ -387,17 +390,29 @@ impl MainWindow {
         Some(&self.listing.as_ref()?.path)
     }
 
+    fn middle(
+        &self,
+        part_column: Option<&ShownColumn>,
+        listing: &Listing,
+        (entry, index): (&Entry, usize),
+        cx: &Context<Self>,
+    ) -> Middle {
+        Middle {
+            part: part_column.map(|column| {
+                column
+                    .cell(entry, cx)
+                    .unwrap_or_else(|| div().into_any_element())
+            }),
+            folder: self.folder_cell(listing, (entry, index), cx),
+        }
+    }
+
     fn folder_cell(
         &self,
         listing: &Listing,
         (entry, index): (&Entry, usize),
-        part_column: Option<&ShownColumn>,
         cx: &Context<Self>,
     ) -> Option<AnyElement> {
-        if let Some(column) = part_column {
-            let text = column.cell(entry, cx).unwrap_or_default();
-            return Some(detail(text.to_string(), &Colors::of(cx)).into_any_element());
-        }
         listing
             .folders
             .is_some()
@@ -422,18 +437,19 @@ impl MainWindow {
                 .child(column.head)
                 .into_any_element()
         });
-        let folder = part.or_else(|| {
-            let listed = self.listed_page().is_some_and(PageRef::folder_column);
-            (self.showing_found() || listed).then(folder_head)
-        });
+        let listed = self.listed_page().is_some_and(PageRef::folder_column);
+        let folder = (self.showing_found() || listed).then(folder_head);
         let widths = self.column_widths(cx);
-        let grips = self.column_grips(folder.is_some(), widths, cx);
-        column_heads(order, folder, widths, colors, cx).children(grips)
+        let shown = (part.is_some(), folder.is_some());
+        let grips = self.column_grips(shown, widths, cx);
+        column_heads(order, Middle { part, folder }, widths, colors, cx).children(grips)
     }
 
     fn column_widths(&self, cx: &App) -> ColumnWidths {
         ColumnWidths {
+            part: self.width_of(Resizable::Part, cx),
             folder: self.width_of(Resizable::Folder, cx),
+            kind: self.width_of(Resizable::Kind, cx),
             modified: self.width_of(Resizable::Modified, cx),
             size: self.width_of(Resizable::Size, cx),
         }
@@ -441,20 +457,29 @@ impl MainWindow {
 
     fn column_grips(
         &self,
-        folder: bool,
+        (part, folder): (bool, bool),
         widths: ColumnWidths,
         cx: &Context<Self>,
     ) -> Vec<Stateful<Div>> {
         let half = (size::COLUMN_GAP - size::GRIP_REACH) * GRIP_CENTRE;
         let size_left = size::ROW_PAD + widths.size + half;
         let modified_left = size_left + size::COLUMN_GAP + widths.modified;
-        let folder_left = modified_left + size::COLUMN_GAP + widths.folder;
+        let kind_left = modified_left + size::COLUMN_GAP + widths.kind;
         let mut grips = vec![
             self.grip(Resizable::Size, cx).right(size_left),
             self.grip(Resizable::Modified, cx).right(modified_left),
+            self.grip(Resizable::Kind, cx).right(kind_left),
         ];
-        if folder {
-            grips.push(self.grip(Resizable::Folder, cx).right(folder_left));
+        let mut left = kind_left;
+        let middle = [
+            (folder, Resizable::Folder, widths.folder),
+            (part, Resizable::Part, widths.part),
+        ];
+        for (shown, column, width) in middle {
+            if shown {
+                left += size::COLUMN_GAP + width;
+                grips.push(self.grip(column, cx).right(left));
+            }
         }
         grips
     }
@@ -469,7 +494,7 @@ fn folder_head() -> AnyElement {
 
 fn column_heads(
     order: Option<Order>,
-    folder: Option<AnyElement>,
+    middle: Middle,
     widths: ColumnWidths,
     colors: &Colors,
     cx: &Context<MainWindow>,
@@ -498,8 +523,11 @@ fn column_heads(
                 .h_full()
                 .child(cells(
                     div().flex().child(head(SortKey::Name, NAME_LABEL)),
-                    folder,
-                    head(SortKey::Modified, MODIFIED_LABEL),
+                    middle,
+                    (
+                        head(SortKey::Kind, KIND_LABEL),
+                        head(SortKey::Modified, MODIFIED_LABEL),
+                    ),
                     (
                         head(SortKey::Size, SIZE_LABEL)
                             .justify_end()

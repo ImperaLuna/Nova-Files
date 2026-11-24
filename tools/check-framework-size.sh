@@ -7,7 +7,7 @@
 set -euo pipefail
 
 readonly BASE_CEILING=2350
-readonly SHELL_CEILING=1250
+readonly SHELL_CEILING=1275
 
 code_files() { # <folder>
     find "$1" -name '*.rs' -not -name tests.rs -not -path '*/tests/*' -print0

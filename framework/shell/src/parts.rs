@@ -35,7 +35,7 @@ mod window;
 pub use registry::Parts;
 pub use window::WindowParts;
 
-type ShownCell = Box<dyn Fn(&Entry, &App) -> Option<SharedString>>;
+type ShownCell = Box<dyn Fn(&Entry, &App) -> Option<AnyElement>>;
 
 pub struct ShownColumn {
     pub head: SharedString,
@@ -44,7 +44,7 @@ pub struct ShownColumn {
 }
 
 impl ShownColumn {
-    pub fn cell(&self, entry: &Entry, cx: &App) -> Option<SharedString> {
+    pub fn cell(&self, entry: &Entry, cx: &App) -> Option<AnyElement> {
         (self.cell)(entry, cx)
     }
 }

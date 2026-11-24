@@ -103,6 +103,7 @@ pub fn spawn_with_archiver(
                 home,
                 places,
                 gathered,
+                git: nova_files_git_core::Reader::default(),
                 window_state,
                 settings,
                 theme,

@@ -3,7 +3,7 @@
 # The gathered feature's window half: the Games and Projects pages and
 # their rows in the sidebar, the Library column, the chip that lists and
 # removes their folders, adding a folder by picking or dropping it, and
-# the notes that undo it.
+# the notes that undo it, and each project's branch and changes.
 #
 # Allowed outside crates:
 # - gpui
@@ -11,6 +11,7 @@
 # Allowed workspace crates:
 # - nova-files-api
 # - nova-files-gathered-api
+# - nova-files-git-api
 # - nova-files-shell
 
 [package]
@@ -31,4 +32,5 @@ workspace = true
 gpui.workspace = true
 nova-files-api.workspace = true
 nova-files-gathered-api.workspace = true
+nova-files-git-api.workspace = true
 nova-files-shell.workspace = true

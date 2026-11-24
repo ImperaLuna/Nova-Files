@@ -14,6 +14,8 @@ use nova_files_folders_api as folders_api;
 use nova_files_folders_core::Store as FolderViewsStore;
 use nova_files_gathered_api as gathered_api;
 use nova_files_gathered_core::Store as GatheredStore;
+use nova_files_git_api as git_api;
+use nova_files_git_core::Reader as GitReader;
 use nova_files_look_api as look_api;
 use nova_files_look_core::FileIcons;
 use nova_files_look_core::theme::Store as ThemeStore;
@@ -51,6 +53,7 @@ pub struct Setup {
     pub home: Option<Home>,
     pub places: PlacesStore,
     pub gathered: GatheredStore,
+    pub git: GitReader,
     pub window_state: WindowStateStore,
     pub settings: SettingsStore,
     pub theme: ThemeStore,
@@ -87,6 +90,12 @@ pub fn routes() -> Result<Routes<Setup, Client>, MessageType> {
         Ok(())
     })?;
     routes.on(always(gathered))?;
+    routes.on(|setup: &Setup, id, client: &Client, command| {
+        match command {
+            git_api::Command::Repos(folders) => setup.git.read(id, client.events(), folders),
+        }
+        Ok(())
+    })?;
     routes.on(|setup: &Setup, id, client: &Client, command| {
         match command {
             look_api::Command::Watch => setup.theme.listen(id, client.events()),
@@ -201,6 +210,11 @@ fn preview(setup: &Setup, _: ClientId, client: &Client, command: preview_api::Co
             };
             nova_files_preview_core::answer(client.events(), request);
         }
+        preview_api::Command::Page { id, index, width } => {
+            let current = client.current_preview();
+            nova_files_preview_core::page(client.events(), current, id, index, width);
+        }
+        preview_api::Command::Closed => client.current_preview().cancel(),
     }
 }
 
@@ -258,6 +272,7 @@ pub fn emitted_types() -> Vec<MessageType> {
         MessageType::of::<DrivesEvent>(),
         MessageType::of::<folders_api::Event>(),
         MessageType::of::<gathered_api::Event>(),
+        MessageType::of::<git_api::Event>(),
         MessageType::of::<look_api::Event>(),
         MessageType::of::<open_api::Event>(),
         MessageType::of::<places_api::Event>(),
@@ -304,6 +319,7 @@ fn forget(setup: &Setup, client: ClientId) {
     setup.theme.forget(client);
     setup.places.forget(client);
     setup.gathered.forget(client);
+    setup.git.forget(client);
     setup.folder_views.forget(client);
     setup.drives.forget(client);
     setup.jobs.audience().leave(client);

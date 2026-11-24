@@ -1,0 +1,19 @@
+# nova-files-git-api
+#
+# What the git feature's two halves say to each other: which folders a
+# window wants the git state of, and the state of each.
+#
+# Allowed outside crates: none
+#
+# Allowed workspace crates: none
+
+[package]
+name = "nova-files-git-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

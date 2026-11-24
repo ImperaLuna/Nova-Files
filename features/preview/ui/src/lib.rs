@@ -21,7 +21,9 @@ use nova_files_shell::{Entries, Host, Move, NavEvent, Part, Scene, Showing, Slot
 
 use draw::{meta, room};
 pub use looks::Previewed;
-use looks::{DEFAULT_FIT, QuickLook, QuickLooks, Shown, moved, render_image, without_pixels};
+use looks::{
+    DEFAULT_FIT, QuickLook, QuickLooks, Shown, moved, render_image, render_moving, without_pixels,
+};
 
 pub struct PreviewPart {
     host: Host,
@@ -185,6 +187,7 @@ impl PreviewPart {
         self.looks.docked = false;
         if let Some(open) = self.looks.open.take() {
             release(open.shown.and_then(|shown| shown.picture), cx);
+            self.host.link.send(Command::Closed).ok();
             cx.notify();
         }
     }
@@ -354,6 +357,7 @@ impl PreviewPart {
         match event {
             Event::Previewed { id, preview } => self.preview_arrived(id, Some(preview), cx),
             Event::Unreadable { id, .. } => self.preview_arrived(id, None, cx),
+            Event::Paged { .. } => {}
         }
     }
 
@@ -366,17 +370,23 @@ impl PreviewPart {
         if self.looks.open.as_ref().map(|open| open.asked) != Some(id) {
             return;
         }
-        let Some(PreviewContent::Picture(picture)) =
-            preview.as_deref().map(|preview| &preview.content)
-        else {
-            self.show_preview(id, preview, None, cx);
-            return;
+        let converting = match preview.as_deref().map(|preview| &preview.content) {
+            Some(PreviewContent::Picture(picture)) => {
+                let picture = picture.clone();
+                cx.background_executor()
+                    .spawn(async move { render_image(&picture) })
+            }
+            Some(PreviewContent::Moving(frames)) => {
+                let frames = frames.clone();
+                cx.background_executor()
+                    .spawn(async move { render_moving(&frames) })
+            }
+            _ => {
+                self.show_preview(id, preview, None, cx);
+                return;
+            }
         };
-        let picture = picture.clone();
         let preview = preview.map(|preview| Arc::new(without_pixels(&preview)));
-        let converting = cx
-            .background_executor()
-            .spawn(async move { render_image(&picture) });
         cx.spawn(async move |this, cx| {
             let image = converting.await;
             this.update(cx, |this, cx| {

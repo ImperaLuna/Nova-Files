@@ -7,6 +7,7 @@ mod focus;
 mod menus;
 mod preview;
 mod renaming;
+mod shortcuts;
 mod trash;
 
 use super::*;

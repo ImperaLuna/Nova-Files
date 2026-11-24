@@ -30,6 +30,7 @@ pub struct Colors {
     pub glow: Rgba,
     pub drop: Rgba,
     pub drop_edge: Rgba,
+    pub changed: Rgba,
     pub tags: Tags,
     pub code: Code,
 }
@@ -124,6 +125,7 @@ impl Colors {
             glow: thin(palette.primary, share::GLOW),
             drop: thin(palette.primary, share::DROP),
             drop_edge: color(palette.primary),
+            changed: color(palette.warning),
             tags: Tags::new(palette, text_dim),
             code: Code {
                 plain: into_bg(palette.fg, share::SOFT),
@@ -253,6 +255,7 @@ pub mod size {
         px(256.0),
     ];
     pub const MODIFIED_WIDTH: Pixels = px(150.0);
+    pub const KIND_WIDTH: Pixels = px(140.0);
     pub const SIZE_WIDTH: Pixels = px(92.0);
     pub const HEAD_HEIGHT: Pixels = px(38.0);
     pub const HEAD_TOP: Pixels = px(4.0);
@@ -313,6 +316,9 @@ pub mod size {
     pub const SEARCH_PAD: Pixels = px(12.0);
     pub const SEARCH_GAP: Pixels = px(9.0);
     pub const FOLDER_WIDTH: Pixels = px(200.0);
+    pub const PART_WIDTH: Pixels = px(170.0);
+    pub const MARK_DOT: Pixels = px(7.0);
+    pub const MARK_GAP: Pixels = px(7.0);
     pub const FOLDER_LINK_HEIGHT: Pixels = px(26.0);
     pub const FOLDER_LINK_PAD: Pixels = px(8.0);
     pub const CHIP_HEIGHT: Pixels = px(28.0);
@@ -588,6 +594,7 @@ mod tests {
         assert_eq!(colors.caret, color(palette.primary));
         assert_eq!(colors.on_accept, color(palette.on_accent));
         assert_eq!(colors.danger, color(palette.error));
+        assert_eq!(colors.changed, color(palette.warning));
         assert_eq!(colors.shadow, thin(palette.fg, share::SHADOW_LIGHT));
         let dark = Colors::default();
         assert_eq!(dark.shadow, thin(SHADOW_DARK_BASE, share::SHADOW_DARK));

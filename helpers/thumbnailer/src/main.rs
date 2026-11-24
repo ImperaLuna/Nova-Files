@@ -2,12 +2,15 @@
 
 mod batch;
 mod data_dirs;
+mod document;
 mod mime;
+mod moving;
 mod png_text;
 mod preview;
 mod render;
 mod sandbox;
 mod system;
+mod vector;
 
 use std::io::{self, Write as _};
 use std::process::ExitCode;
@@ -20,6 +23,13 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         };
         return preview::run(&request);
+    }
+    if args.next_if(|arg| arg == document::FLAG).is_some() {
+        let Some(file) = document::file_from_args(args) else {
+            writeln!(io::stderr(), "{}", document::USAGE).ok();
+            return ExitCode::FAILURE;
+        };
+        return document::run(&file);
     }
     let Some(batch) = batch::Batch::from_args(args) else {
         writeln!(io::stderr(), "{}", batch::USAGE).ok();

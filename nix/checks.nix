@@ -76,10 +76,11 @@ in
       cargoArtifacts = ciArtifacts;
       cargoNextestExtraArgs = "--workspace --no-tests=warn --test-threads=$NIX_BUILD_CORES";
       # The D-Bus tests start a private dbus-daemon; the archive tests open
-      # 7z archives through 7-Zip.
+      # 7z archives through 7-Zip; the git tests read repositories with git.
       nativeCheckInputs = [
         pkgs.dbus
         pkgs._7zz
+        pkgs.git
       ];
     }
   );

@@ -163,7 +163,7 @@ fn next_order(current: Order, key: SortKey) -> Order {
     let descending = if current.key == key {
         !current.descending
     } else {
-        key != SortKey::Name
+        !matches!(key, SortKey::Name | SortKey::Kind)
     };
     Order { key, descending }
 }
@@ -211,7 +211,7 @@ mod tests {
     }
 
     #[test]
-    fn a_new_column_starts_a_to_z_by_name_and_largest_or_newest_first_otherwise() {
+    fn a_new_column_starts_a_to_z_by_name_or_type_and_largest_or_newest_first_otherwise() {
         let by_size = next_order(Order::default(), SortKey::Size);
         assert_eq!(
             by_size,
@@ -223,6 +223,14 @@ mod tests {
         let by_modified = next_order(by_size, SortKey::Modified);
         assert!(by_modified.descending);
         assert_eq!(next_order(by_modified, SortKey::Name), Order::default());
+        let by_kind = next_order(by_modified, SortKey::Kind);
+        assert_eq!(
+            by_kind,
+            Order {
+                key: SortKey::Kind,
+                descending: false
+            }
+        );
     }
 
     #[test]

@@ -510,7 +510,11 @@ fn quick_look_on_a_result_asks_for_the_file_where_it_is(cx: &mut TestAppContext)
     let looked: Vec<PathBuf> = core
         .sent::<nova_files_preview_api::Command>()
         .into_iter()
-        .map(|nova_files_preview_api::Command::Preview { path, .. }| path)
+        .filter_map(|command| match command {
+            nova_files_preview_api::Command::Preview { path, .. } => Some(path),
+            nova_files_preview_api::Command::Page { .. }
+            | nova_files_preview_api::Command::Closed => None,
+        })
         .collect();
     assert_eq!(looked, [PathBuf::from("/docs/report.pdf")]);
 }

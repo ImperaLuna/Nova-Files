@@ -1,9 +1,9 @@
 use std::sync::Arc;
 
 use gpui::RenderImage;
-use image::{Frame, RgbaImage};
+use image::{Delay, Frame, RgbaImage};
 use nova_files_api::{EntryId, Fit, ListingId, Picture};
-use nova_files_preview_api::{Preview, PreviewContent, PreviewId};
+use nova_files_preview_api::{Frame as MovingFrame, Preview, PreviewContent, PreviewId};
 
 use crate::code::Coded;
 
@@ -70,11 +70,21 @@ pub fn moved(mut shown: Shown, from: EntryId, to: EntryId) -> Shown {
 }
 
 pub fn without_pixels(preview: &Preview) -> Preview {
+    let bare = |picture: &Picture| Picture {
+        pixels: Arc::from([]),
+        ..picture.clone()
+    };
     let content = match &preview.content {
-        PreviewContent::Picture(picture) => PreviewContent::Picture(Picture {
-            pixels: Arc::from([]),
-            ..picture.clone()
-        }),
+        PreviewContent::Picture(picture) => PreviewContent::Picture(bare(picture)),
+        PreviewContent::Moving(frames) => PreviewContent::Moving(
+            frames
+                .iter()
+                .map(|frame| MovingFrame {
+                    picture: bare(&frame.picture),
+                    delay: frame.delay,
+                })
+                .collect(),
+        ),
         other => other.clone(),
     };
     Preview {
@@ -84,12 +94,26 @@ pub fn without_pixels(preview: &Preview) -> Preview {
 }
 
 pub fn render_image(picture: &Picture) -> Option<RenderImage> {
+    Some(RenderImage::new([Frame::new(bgra(picture)?)]))
+}
+
+pub fn render_moving(frames: &[MovingFrame]) -> Option<RenderImage> {
+    let frames: Option<Vec<Frame>> = frames
+        .iter()
+        .map(|frame| {
+            let delay = Delay::from_saturating_duration(frame.delay);
+            Some(Frame::from_parts(bgra(&frame.picture)?, 0, 0, delay))
+        })
+        .collect();
+    Some(RenderImage::new(frames?))
+}
+
+fn bgra(picture: &Picture) -> Option<RgbaImage> {
     let mut pixels = picture.pixels.to_vec();
     for pixel in pixels.as_chunks_mut::<BYTES_PER_PIXEL>().0 {
         pixel.swap(RED, BLUE);
     }
-    let image = RgbaImage::from_raw(picture.width, picture.height, pixels)?;
-    Some(RenderImage::new([Frame::new(image)]))
+    RgbaImage::from_raw(picture.width, picture.height, pixels)
 }
 
 #[cfg(test)]
