@@ -4,6 +4,7 @@ mod scripted_drives;
 mod scripted_icons;
 mod scripted_jobs;
 mod scripted_parts;
+mod scripted_play;
 mod scripted_properties;
 mod scripted_search;
 mod scripted_select;

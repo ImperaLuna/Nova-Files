@@ -224,6 +224,11 @@ fn preview(setup: &Setup, _: ClientId, client: &Client, command: preview_api::Co
             nova_files_preview_core::control(client.events().as_ref(), current, id, control);
         }
         preview_api::Command::Closed => client.current_preview().cancel(),
+        preview_api::Command::OpenAt { path, at } => {
+            let archives: Arc<dyn TakeOut> = Arc::<Inside>::clone(&setup.inside);
+            let opening = (Arc::clone(&setup.mime_types), archives);
+            nova_files_open_core::open_at(client.events(), opening, path, at);
+        }
     }
 }
 
