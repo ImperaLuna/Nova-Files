@@ -357,6 +357,15 @@ pub mod size {
     pub const MENU_SHADOW_Y: Pixels = px(18.0);
     pub const MENU_SHADOW_BLUR: Pixels = px(44.0);
     pub const FILTER_MAX_WIDTH: Pixels = px(200.0);
+    pub const SHORTCUTS_WIDTH: Pixels = px(520.0);
+    pub const SHORTCUTS_TOP: Pixels = px(56.0);
+    pub const SHORTCUTS_LIST_HEIGHT: Pixels = px(420.0);
+    pub const SHORTCUTS_FIELD_HEIGHT: Pixels = px(44.0);
+    pub const SHORTCUTS_HEAD_TOP: Pixels = px(10.0);
+    pub const KEY_CAP_HEIGHT: Pixels = px(20.0);
+    pub const KEY_CAP_PAD: Pixels = px(6.0);
+    pub const KEY_CAP_GAP: Pixels = px(3.0);
+    pub const KEY_CHOICE_GAP: Pixels = px(6.0);
     pub const FILTER_MENU_MAX_HEIGHT: Pixels = px(320.0);
 }
 

@@ -47,6 +47,7 @@ pub const ACTIONS: &[CommandSpec] = &[
     NEXT_TAB,
     PREVIOUS_TAB,
     MENU,
+    SHORTCUTS,
 ];
 
 spec!(UP, GoUp, "go.up", "Up", ["alt-up"]);
@@ -242,9 +243,17 @@ spec!(
 );
 
 spec!(MENU, OpenMenu, "menu.open", "Menu", ["menu", "shift-f10"]);
+spec!(
+    SHORTCUTS,
+    ShowShortcuts,
+    "help.shortcuts",
+    "Shortcuts",
+    ["?", "ctrl-shift-p"]
+);
 
 pub fn bind_keys(cx: &mut App) {
     crate::menu::bind_keys(cx);
+    crate::shortcuts::bind_keys(cx);
     cx.bind_keys(
         ACTIONS
             .iter()

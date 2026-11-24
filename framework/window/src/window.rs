@@ -16,6 +16,7 @@ mod renaming;
 mod rows;
 mod search;
 mod shares;
+mod shortcuts;
 mod showing;
 mod slots;
 mod start;
@@ -63,6 +64,7 @@ use crate::lift::Lift;
 use crate::menu::Menu;
 use crate::scroll_bar::ScrollBar;
 use crate::selection::Selection;
+use crate::shortcuts::Shortcuts;
 use crate::theme_icons::ThemeIcons;
 use jobs::Jobs;
 use nova_files_shell::History;
@@ -140,6 +142,7 @@ pub struct MainWindow {
     shown_page: Option<(TabId, PageRef)>,
     known: KnownFolders,
     pub(crate) menu: Option<Menu>,
+    pub(crate) shortcuts: Option<Shortcuts>,
     pub(crate) search: search::Over,
     pub(crate) focus: FocusHandle,
     pub(crate) island: Island,
@@ -261,6 +264,7 @@ impl MainWindow {
             shown_page: None,
             known: KnownFolders::default(),
             menu: None,
+            shortcuts: None,
             search: search::Over::default(),
             focus: host.list.clone(),
             island: Island::default(),

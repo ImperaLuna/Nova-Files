@@ -60,6 +60,7 @@ gpui::actions!(
         BiggerIcons,
         SmallerIcons,
         OpenMenu,
+        ShowShortcuts,
         ShowProperties,
     ]
 );
