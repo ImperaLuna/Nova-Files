@@ -5,6 +5,7 @@ use std::collections::HashSet;
 use std::ffi::OsStr;
 use std::num::NonZero;
 use std::ops::Range;
+use std::panic::resume_unwind;
 use std::path::{Path, PathBuf};
 use std::thread;
 
@@ -280,7 +281,7 @@ impl Search<'_> {
                 .collect();
             running
                 .into_iter()
-                .flat_map(|part| part.join().unwrap_or_default())
+                .flat_map(|part| part.join().unwrap_or_else(|panic| resume_unwind(panic)))
                 .collect()
         })
     }

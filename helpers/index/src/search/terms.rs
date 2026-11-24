@@ -42,16 +42,6 @@ impl Terms {
         self.terms.len()
     }
 
-    pub fn narrows(&self, wider: &Self) -> bool {
-        self.terms.len() == wider.terms.len()
-            && self.terms.iter().zip(&wider.terms).all(|(term, wide)| {
-                term.along_path == wide.along_path
-                    && term.folders == wide.folders
-                    && term.name.starts_with(&wide.name)
-                    && (term.name.len() >= TYPO_MIN) == (wide.name.len() >= TYPO_MIN)
-            })
-    }
-
     pub fn enter(&self, reach: &mut [u8], folder: &[u8]) {
         for (term, reached) in self.terms.iter().zip(reach) {
             let wanted = if term.along_path {
