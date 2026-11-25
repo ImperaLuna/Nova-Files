@@ -170,7 +170,10 @@ fn stepping_through_pictures_answers_the_last() {
                 break;
             }
             Event::Previewed { id, .. } => assert!(id < last),
-            other @ (Event::Unreadable { .. } | Event::Paged { .. } | Event::Played { .. }) => {
+            other @ (Event::Unreadable { .. }
+            | Event::Paged { .. }
+            | Event::Played { .. }
+            | Event::Drawn { .. }) => {
                 panic!("expected a preview, got {other:?}")
             }
         }
@@ -436,4 +439,49 @@ fn a_text_that_mentions_the_pdf_signature_stays_text() {
         "{:?}",
         shown.content
     );
+}
+
+impl Client {
+    fn draw(&self, id: u64, document: &Path, picture: &Path) -> Option<Picture> {
+        self.connection
+            .send(Command::Draw {
+                id: PreviewId(id),
+                document: document.to_owned(),
+                picture: picture.to_owned(),
+                fit: Fit {
+                    width: WIDTH,
+                    height: HEIGHT,
+                },
+            })
+            .unwrap();
+        match self.events.recv_timeout(WAIT).unwrap() {
+            Event::Drawn {
+                id: got,
+                picture: asked,
+                drawn,
+            } if got == PreviewId(id) && asked == picture => drawn,
+            other => panic!("expected a drawn picture, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn a_note_draws_only_the_pictures_inside_its_own_folder() {
+    let temp = TestFolder::new("preview-note-pictures");
+    let notes = temp.join("notes");
+    fs::create_dir_all(&notes).unwrap();
+    let note = notes.join("a.md");
+    fs::write(&note, "![x](x.png)\n").unwrap();
+    orange_picture(&notes.join("x.png"), ImageFormat::Png);
+    orange_picture(&temp.join("outside.png"), ImageFormat::Png);
+    let client = Client::new(temp.path());
+    let fit = Fit {
+        width: WIDTH,
+        height: HEIGHT,
+    };
+    client.preview(1, &note, fit);
+
+    let inside = client.draw(1, &note, &notes.join("x.png")).unwrap();
+    assert_eq!((inside.width, inside.height), (WIDTH, HEIGHT));
+    assert_eq!(client.draw(1, &note, &notes.join("../outside.png")), None);
 }
