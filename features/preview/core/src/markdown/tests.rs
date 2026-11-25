@@ -156,7 +156,11 @@ fn a_picture_splits_its_paragraph() {
     let blocks = blocks("Look:\n![the screen](shots/one.png)\nNice.\n");
     let [
         Block::Paragraph(before),
-        Block::Picture { target, alt },
+        Block::Picture {
+            target,
+            alt,
+            link: None,
+        },
         Block::Paragraph(after),
     ] = blocks.as_slice()
     else {
@@ -241,4 +245,42 @@ fn fences_past_the_colouring_budget_stay_plain() {
     let coloured = |block: &Block| matches!(block, Block::Code { runs, .. } if !runs.is_empty());
     assert!(blocks.first().is_some_and(coloured));
     assert!(blocks.last().is_some_and(|last| !coloured(last)));
+}
+
+#[test]
+fn html_shows_only_its_words() {
+    let blocks =
+        blocks("<!-- TOC -->\n\n<p align=\"center\"><b>Fast</b></p>\n\nPress <kbd>Esc</kbd>.\n");
+    let [Block::Paragraph(html), Block::Paragraph(press)] = blocks.as_slice() else {
+        panic!("{blocks:?}");
+    };
+    assert_eq!(words(html), "Fast");
+    assert_eq!(words(press), "Press Esc.");
+}
+
+#[test]
+fn a_linked_picture_keeps_its_link_and_whole_alt() {
+    let blocks = blocks("[![`ci` status](badge.svg)](https://ci.example)\n");
+    let [Block::Picture { alt, link, .. }] = blocks.as_slice() else {
+        panic!("{blocks:?}");
+    };
+    assert_eq!(&**alt, "ci status");
+    assert_eq!(link.as_deref(), Some("https://ci.example"));
+}
+
+#[test]
+fn lists_nest_as_deep_as_quotes() {
+    let text: String = (0..DEEPEST)
+        .flat_map(|level| ["  ".repeat(level), "- level\n".to_owned()])
+        .collect();
+    let mut depth = 0;
+    let blocks = blocks(&text);
+    let mut level = blocks.as_slice();
+    while let [Block::List { items, .. }] = level {
+        depth += 1;
+        level = items.last().map_or(&[], |item| {
+            item.blocks.last().map_or(&[], std::slice::from_ref)
+        });
+    }
+    assert_eq!(depth, DEEPEST);
 }

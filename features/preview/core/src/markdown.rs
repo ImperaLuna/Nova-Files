@@ -8,6 +8,7 @@ use pulldown_cmark::{Alignment, CodeBlockKind, Event, HeadingLevel, Options, Par
 use crate::code;
 use source::Source;
 
+mod html;
 mod source;
 
 const DEEPEST: usize = 12;
@@ -115,6 +116,7 @@ struct Page {
     links: Vec<Arc<str>>,
     code: Option<(Option<String>, String)>,
     picture: Option<(Arc<str>, String)>,
+    html: Option<String>,
     tables: Vec<Table>,
     metadata: bool,
     colouring: Colouring,
@@ -140,7 +142,9 @@ impl Page {
         match event {
             Event::Start(tag) => self.start(tag),
             Event::End(tag) => self.end(tag),
-            Event::Text(text) | Event::Html(text) | Event::InlineHtml(text) => self.text(&text),
+            Event::Text(text) => self.text(&text),
+            Event::Html(text) => self.html(&text),
+            Event::InlineHtml(_) => {}
             Event::Code(text) => self.write(&text, Look::CODE),
             Event::InlineMath(text) => self.write(&text, Look::FORMULA),
             Event::DisplayMath(text) => self.display_formula(&text),
@@ -174,7 +178,7 @@ impl Page {
                 blocks: Vec::new(),
             }),
             Tag::CodeBlock(kind) => self.open_code(language(&kind)),
-            Tag::HtmlBlock => self.open_code(None),
+            Tag::HtmlBlock => self.open_html(),
             Tag::Table(aligns) => self.open_table(&aligns),
             Tag::TableHead => self.with_table(|table| table.in_head = true),
             Tag::TableRow => self.with_table(|table| table.row.clear()),
@@ -197,7 +201,8 @@ impl Page {
                 self.close_words();
                 self.let_go();
             }
-            TagEnd::CodeBlock | TagEnd::HtmlBlock => self.close_code(),
+            TagEnd::CodeBlock => self.close_code(),
+            TagEnd::HtmlBlock => self.close_html(),
             TagEnd::Table => self.close_table(),
             TagEnd::TableHead => self.with_table(|table| table.in_head = false),
             TagEnd::TableRow => self.with_table(|table| {
@@ -222,14 +227,38 @@ impl Page {
         }
         if let Some((_, code)) = self.code.as_mut() {
             code.push_str(text);
-        } else if let Some((_, alt)) = self.picture.as_mut() {
-            alt.push_str(text);
         } else {
             self.write(text, Look::PLAIN);
         }
     }
 
+    fn html(&mut self, text: &str) {
+        if let Some(html) = self.html.as_mut() {
+            html.push_str(text);
+        }
+    }
+
+    fn open_html(&mut self) {
+        self.close_words();
+        self.html = Some(String::new());
+    }
+
+    fn close_html(&mut self) {
+        let Some(html) = self.html.take() else {
+            return;
+        };
+        let words = html::words(&html);
+        if !words.is_empty() {
+            self.write(&words, Look::PLAIN);
+            self.close_words();
+        }
+    }
+
     fn write(&mut self, text: &str, look: Look) {
+        if let Some((_, alt)) = self.picture.as_mut() {
+            alt.push_str(text);
+            return;
+        }
         if self.words.is_none() {
             self.words = Some(Words::Paragraph);
         }
@@ -280,9 +309,11 @@ impl Page {
         };
         if matches!(self.words, Some(Words::Paragraph) | None) {
             self.close_words();
+            let link = self.links.last().cloned();
             self.add(Block::Picture {
                 target,
                 alt: alt.into(),
+                link,
             });
             self.words = Some(Words::Paragraph);
         } else {
@@ -346,7 +377,12 @@ impl Page {
 
     fn hold(&mut self, holder: Holder) {
         self.close_words();
-        let too_deep = self.holders.len() >= DEEPEST;
+        let depth = self
+            .holders
+            .iter()
+            .filter(|holder| !matches!(holder, Holder::Item { .. }))
+            .count();
+        let too_deep = depth >= DEEPEST;
         let in_flat = matches!(self.holders.last(), Some(Holder::Flat));
         self.holders.push(if too_deep || in_flat {
             Holder::Flat
@@ -403,6 +439,7 @@ impl Page {
 
     fn finish(mut self) -> Vec<Block> {
         self.close_code();
+        self.close_html();
         self.close_words();
         while !self.tables.is_empty() {
             self.close_table();

@@ -39,11 +39,12 @@ pub enum Block {
     },
     /// A horizontal rule.
     Rule,
-    /// A picture on its own line: `target` as the file wrote it, and the
-    /// words that stand for it.
+    /// A picture on its own line: `target` as the file wrote it, the words
+    /// that stand for it, and where it links to when it is a link.
     Picture {
         target: Arc<str>,
         alt: Arc<str>,
+        link: Option<Arc<str>>,
     },
     /// A diagram or formula the page draws from its source.
     Figure {
