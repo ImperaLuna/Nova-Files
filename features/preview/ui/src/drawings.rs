@@ -61,7 +61,10 @@ impl PreviewPart {
             };
             this.update(cx, |this, cx| {
                 let released = match this.page_of_mut(id) {
-                    Some(page) => page.pictures.arrived(&picture, &image),
+                    Some(page) => {
+                        page.list.remeasure();
+                        page.pictures.arrived(&picture, &image)
+                    }
                     None => vec![image],
                 };
                 release(released, cx);
