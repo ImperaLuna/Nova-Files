@@ -174,7 +174,7 @@ fn art(
                 || big_icon(name, kind, colors),
                 |(page, coded)| {
                     let reading = (coded.family.clone(), Rc::clone(follow));
-                    page_art(page, reading, room, colors)
+                    page_art(page, reading, (room, scale_factor), colors)
                 },
             )
         }

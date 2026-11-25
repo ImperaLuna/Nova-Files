@@ -2,6 +2,7 @@
 
 mod code;
 mod draw;
+mod drawings;
 mod links;
 mod looks;
 mod page;
@@ -526,6 +527,7 @@ impl PreviewPart {
             Event::Unreadable { id, .. } => self.preview_arrived(id, None, cx),
             Event::Paged { id, index, picture } => self.page_arrived(id, index, picture, cx),
             Event::Played { id, played } => self.played(id, played, cx),
+            Event::Drawn { id, picture, drawn } => self.drawn(id, picture, drawn, cx),
         }
     }
 
@@ -605,12 +607,20 @@ impl PreviewPart {
             .as_mut()
             .filter(|shown| shown.entry == entry)
             .and_then(|shown| shown.page.take());
-        let page = match preview.as_deref().map(|preview| &preview.content) {
-            Some(PreviewContent::Markdown { blocks, .. }) => {
-                let mono = code::mono_family(cx);
-                Some(Page::new(Arc::clone(blocks), &mono).carrying(carried_page))
-            }
-            _ => None,
+        let page = if let Some(Preview {
+            content: PreviewContent::Markdown { blocks, .. },
+            path,
+            ..
+        }) = preview.as_deref()
+        {
+            let mono = code::mono_family(cx);
+            let page = Page::new(Arc::clone(blocks), &mono, path.parent());
+            let (page, released) = page.carrying(carried_page);
+            release(released, cx);
+            Some(page)
+        } else {
+            release(carried_page.into_iter().flat_map(Page::images), cx);
+            None
         };
         let media = match preview.as_deref().map(|preview| &preview.content) {
             Some(PreviewContent::Media { video }) => Some(Media::new(id, *video)),
@@ -630,6 +640,7 @@ impl PreviewPart {
         if self.previewing() {
             self.start_playing();
         }
+        self.ask_pictures(id);
         cx.notify();
     }
 }
