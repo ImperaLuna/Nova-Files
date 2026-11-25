@@ -208,12 +208,19 @@ fn preview(setup: &Setup, _: ClientId, client: &Client, command: preview_api::Co
                 current: Arc::clone(client.current_preview()),
                 types: Arc::new(LazyMimes(Arc::clone(&setup.mime_types))),
                 helper: setup.thumbnails.as_ref().map(|setup| setup.helper.clone()),
+                player: setup
+                    .thumbnails
+                    .as_ref()
+                    .and_then(|setup| nova_files_preview_core::player_beside(&setup.helper)),
             };
             nova_files_preview_core::answer(client.events(), request);
         }
         preview_api::Command::Page { id, index, width } => {
             let current = client.current_preview();
             nova_files_preview_core::page(client.events(), current, id, index, width);
+        }
+        preview_api::Command::Control { id, control } => {
+            nova_files_preview_core::control(client.current_preview(), id, control);
         }
         preview_api::Command::Closed => client.current_preview().cancel(),
     }

@@ -4052,8 +4052,12 @@ dependencies = [
 name = "nova-files-player"
 version = "0.1.0"
 dependencies = [
+ "image",
  "landlock",
  "libloading",
+ "nova-files",
+ "nova-files-api",
+ "nova-files-preview-api",
  "nova-files-test-folder",
 ]
 

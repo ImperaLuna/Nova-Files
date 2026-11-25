@@ -170,7 +170,7 @@ fn stepping_through_pictures_answers_the_last() {
                 break;
             }
             Event::Previewed { id, .. } => assert!(id < last),
-            other @ (Event::Unreadable { .. } | Event::Paged { .. }) => {
+            other @ (Event::Unreadable { .. } | Event::Paged { .. } | Event::Played { .. }) => {
                 panic!("expected a preview, got {other:?}")
             }
         }

@@ -1,4 +1,5 @@
 mod document;
+mod player;
 
 use std::env;
 use std::ffi::OsString;
@@ -26,6 +27,7 @@ const LINE_END: u8 = b'\n';
 const SIZE_SEPARATOR: char = ' ';
 
 pub use document::{Document, Opened, PageSize, document};
+pub use player::{Heard, Player, Tag, Told, play, player_beside};
 
 #[derive(Debug, Clone)]
 pub struct Job {
@@ -216,9 +218,13 @@ fn read_picture(mut output: impl Read, fit: Fit) -> Option<Vec<(Picture, Duratio
 }
 
 fn read_line(output: &mut impl Read) -> Option<String> {
-    let mut line = Vec::with_capacity(MAX_SIZE_LINE);
+    read_line_up_to(output, MAX_SIZE_LINE)
+}
+
+fn read_line_up_to(output: &mut impl Read, longest: usize) -> Option<String> {
+    let mut line = Vec::with_capacity(longest.min(MAX_SIZE_LINE));
     let mut byte = [0];
-    while line.len() < MAX_SIZE_LINE {
+    while line.len() < longest {
         output.read_exact(&mut byte).ok()?;
         if byte[0] == LINE_END {
             return String::from_utf8(line).ok();
