@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::mem;
 use std::sync::Arc;
 
@@ -16,6 +17,8 @@ const DIAGRAM_LANGUAGE: &str = "mermaid";
 const FORMULA_LANGUAGE: &str = "math";
 const SOFT_BREAK: &str = " ";
 const HARD_BREAK: &str = "\n";
+const NOTE_OPEN: &str = "[";
+const NOTE_CLOSE: &str = "]";
 const EVENTS_BETWEEN_CHECKS: usize = 512;
 const FENCES_COLOURED: usize = 64;
 
@@ -120,6 +123,7 @@ struct Page {
     tables: Vec<Table>,
     metadata: bool,
     colouring: Colouring,
+    notes: HashMap<String, usize>,
 }
 
 #[derive(Default)]
@@ -148,7 +152,10 @@ impl Page {
             Event::Code(text) => self.write(&text, Look::CODE),
             Event::InlineMath(text) => self.write(&text, Look::FORMULA),
             Event::DisplayMath(text) => self.display_formula(&text),
-            Event::FootnoteReference(label) => self.write(&label, Look::NOTE),
+            Event::FootnoteReference(label) => {
+                let number = self.note_number(&label);
+                self.write(&format!("{NOTE_OPEN}{number}{NOTE_CLOSE}"), Look::NOTE);
+            }
             Event::SoftBreak => self.text(SOFT_BREAK),
             Event::HardBreak => self.text(HARD_BREAK),
             Event::Rule => {
@@ -173,10 +180,13 @@ impl Page {
                 checked: None,
                 blocks: Vec::new(),
             }),
-            Tag::FootnoteDefinition(label) => self.hold(Holder::Note {
-                label: label.as_ref().into(),
-                blocks: Vec::new(),
-            }),
+            Tag::FootnoteDefinition(label) => {
+                let number = self.note_number(&label);
+                self.hold(Holder::Note {
+                    label: number.to_string().into(),
+                    blocks: Vec::new(),
+                });
+            }
             Tag::CodeBlock(kind) => self.open_code(language(&kind)),
             Tag::HtmlBlock => self.open_html(),
             Tag::Table(aligns) => self.open_table(&aligns),
@@ -367,6 +377,11 @@ impl Page {
             head: table.head.into(),
             rows: table.rows.into(),
         });
+    }
+
+    fn note_number(&mut self, label: &str) -> usize {
+        let next = self.notes.len() + 1;
+        *self.notes.entry(label.to_owned()).or_insert(next)
     }
 
     fn check(&mut self, checked: bool) {
