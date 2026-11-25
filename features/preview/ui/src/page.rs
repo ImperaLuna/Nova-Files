@@ -1,14 +1,17 @@
 mod blocks;
 mod inline;
+mod pictures;
 
 use std::collections::HashMap;
 use std::ops::Range;
+use std::path::Path;
 use std::rc::Rc;
 use std::sync::Arc;
 
 use gpui::{
     AnyElement, App, InteractiveElement as _, IntoElement as _, ListAlignment, ListOffset,
-    ListState, ParentElement as _, Pixels, SharedString, Size, Styled as _, Window, list, px,
+    ListState, ParentElement as _, Pixels, RenderImage, SharedString, Size, Styled as _, Window,
+    list, px,
 };
 use nova_files_preview_api::markdown::Block;
 use nova_files_shell::theme::{Colors, radius, size};
@@ -18,9 +21,13 @@ use crate::links::slug;
 use crate::pages::Scroll;
 
 pub use blocks::Paint;
+pub use pictures::Pictures;
 
 const PAGE_WIDTH: Pixels = px(760.0);
 const PAGE_PAD_X: Pixels = px(32.0);
+pub const PICTURE_ROOM: Pixels = px(696.0);
+pub const PICTURE_TALL: u32 = 2;
+const BOTH_SIDES: f32 = 2.0;
 const OVERDRAW: Pixels = px(600.0);
 const SCROLL_STEP_SHARE: f32 = 0.9;
 const CODE_ROW_LINES: usize = 32;
@@ -32,6 +39,7 @@ pub struct Page {
     pub blocks: Arc<[Block]>,
     pub rows: Arc<[Row]>,
     pub list: ListState,
+    pub pictures: Pictures,
     anchors: HashMap<String, usize>,
 }
 
@@ -44,14 +52,16 @@ pub enum Row {
 }
 
 impl Page {
-    pub fn new(blocks: Arc<[Block]>, mono: &SharedString) -> Self {
+    pub fn new(blocks: Arc<[Block]>, mono: &SharedString, folder: Option<&Path>) -> Self {
         let rows: Arc<[Row]> = rows(&blocks, mono).into();
         let list = ListState::new(rows.len(), ListAlignment::Top, OVERDRAW);
         let anchors = anchors(&blocks, &rows);
+        let pictures = Pictures::new(&blocks, folder);
         Self {
             blocks,
             rows,
             list,
+            pictures,
             anchors,
         }
     }
@@ -70,11 +80,16 @@ impl Page {
         row.is_some()
     }
 
-    pub fn carrying(self, before: Option<Self>) -> Self {
-        if let Some(before) = before {
-            self.list.scroll_to(before.list.logical_scroll_top());
-        }
-        self
+    pub fn carrying(self, before: Option<Self>) -> (Self, Vec<Arc<RenderImage>>) {
+        let Some(before) = before else {
+            return (self, Vec::new());
+        };
+        self.list.scroll_to(before.list.logical_scroll_top());
+        (self, before.images().collect())
+    }
+
+    pub fn images(self) -> impl Iterator<Item = Arc<RenderImage>> {
+        self.pictures.images()
     }
 
     pub fn scroll(&self, to: Scroll, room: Size<Pixels>) {
@@ -91,20 +106,26 @@ impl Page {
 pub fn page_art(
     page: &Page,
     (mono, follow): (SharedString, Follow),
-    room: Size<Pixels>,
+    (room, scale_factor): (Size<Pixels>, f32),
     colors: &Colors,
 ) -> AnyElement {
     let (blocks, rows) = (Arc::clone(&page.blocks), Arc::clone(&page.rows));
+    let width = PAGE_WIDTH.min(room.width);
     let paint = Paint {
         colors: *colors,
         mono,
         follow,
+        pictures: Rc::clone(&page.pictures.drawn),
+        room: (
+            (width - PAGE_PAD_X * BOTH_SIDES).max(Pixels::ZERO),
+            scale_factor,
+        ),
     };
     gpui::div()
         .debug_selector(|| "preview-markdown".to_owned())
         .flex()
         .flex_col()
-        .w(PAGE_WIDTH.min(room.width))
+        .w(width)
         .h(room.height)
         .overflow_hidden()
         .rounded(radius::CARD)

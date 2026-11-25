@@ -86,6 +86,7 @@ impl Shown {
             .into_iter()
             .chain(self.pages.into_iter().flat_map(Pages::images))
             .chain(self.media.and_then(|media| media.frame))
+            .chain(self.page.into_iter().flat_map(Page::images))
     }
 }
 

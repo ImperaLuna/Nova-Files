@@ -1,9 +1,10 @@
 use std::ops::Range;
+use std::path::Path;
 use std::sync::Arc;
 
 use gpui::{
     AnyElement, Div, IntoElement as _, ParentElement as _, Pixels, SharedString, Styled as _, div,
-    prelude::FluentBuilder as _, px,
+    img, prelude::FluentBuilder as _, px,
 };
 use nova_files_preview_api::Run;
 use nova_files_preview_api::markdown::{Align, Block, Inline, Item};
@@ -13,7 +14,10 @@ use nova_files_shell::widgets::icon;
 
 use super::Follow;
 use super::inline::words;
+use super::pictures::Drawn;
 use crate::code::Coded;
+use crate::draw::logical_side;
+use crate::links::{Link, link};
 
 const BLOCK_GAP: Pixels = px(12.0);
 const BODY_SIZE: Pixels = px(14.5);
@@ -39,11 +43,17 @@ const CELL_PAD_Y: Pixels = px(6.0);
 const NOTE_SIZE: Pixels = px(12.5);
 const NOTE_LABEL_WIDTH: Pixels = px(26.0);
 const LINE_END: char = '\n';
+const PICTURE_GAP: Pixels = px(8.0);
+const PICTURE_ICON: Pixels = px(16.0);
+const HOST_START: &str = "://";
+const ROOT: &str = "/";
 
 pub struct Paint {
     pub colors: Colors,
     pub mono: SharedString,
     pub follow: Follow,
+    pub pictures: Drawn,
+    pub room: (Pixels, f32),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -87,10 +97,7 @@ fn drawn(block: &Block, paint: &Paint) -> AnyElement {
         Block::Figure { source, .. } => code(source, &[], paint),
         Block::Table { aligns, head, rows } => table(aligns, head, rows, paint),
         Block::Rule => div().h(size::LINE).bg(colors.line).into_any_element(),
-        Block::Picture { alt, .. } => div()
-            .text_color(colors.text_dim)
-            .child(SharedString::from(alt.to_string()))
-            .into_any_element(),
+        Block::Picture { target, alt, .. } => picture(target, alt, paint),
         Block::Note { label, blocks } => note(label, blocks, paint),
     }
 }
@@ -270,4 +277,60 @@ fn note(label: &str, blocks: &[Block], paint: &Paint) -> AnyElement {
         )
         .child(stack(blocks, paint).flex_1().min_w_0())
         .into_any_element()
+}
+
+fn picture(target: &Arc<str>, alt: &str, paint: &Paint) -> AnyElement {
+    let Some(image) = paint.pictures.get(target) else {
+        return unshown(target, alt, &paint.colors);
+    };
+    let (room, scale_factor) = paint.room;
+    let side = image.size(0);
+    let (width, height) = (
+        logical_side(side.width.0, scale_factor),
+        logical_side(side.height.0, scale_factor),
+    );
+    let shown = width.min(room);
+    let share = if width > Pixels::ZERO {
+        shown / width
+    } else {
+        0.0
+    };
+    img(Arc::clone(image))
+        .w(shown)
+        .max_w_full()
+        .h(height * share)
+        .rounded(radius::ROW)
+        .into_any_element()
+}
+
+fn unshown(target: &str, alt: &str, colors: &Colors) -> AnyElement {
+    let host = match link(target, Path::new(ROOT)) {
+        Some(Link::Web(address)) => host(&address),
+        _ => None,
+    };
+    div()
+        .flex()
+        .items_center()
+        .gap(PICTURE_GAP)
+        .px(CELL_PAD_X)
+        .py(CELL_PAD_Y)
+        .rounded(radius::ROW)
+        .bg(colors.raised)
+        .text_color(colors.text_dim)
+        .child(icon(Icon::Pictures, PICTURE_ICON, colors.text_dim))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .truncate()
+                .child(SharedString::from(alt.to_owned())),
+        )
+        .children(host.map(|host| div().flex_none().child(SharedString::from(host))))
+        .into_any_element()
+}
+
+fn host(address: &str) -> Option<String> {
+    let (_, rest) = address.split_once(HOST_START)?;
+    let host = rest.split(['/', '?', '#']).next()?;
+    (!host.is_empty()).then(|| host.to_owned())
 }

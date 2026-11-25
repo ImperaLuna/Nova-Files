@@ -229,6 +229,22 @@ fn preview(setup: &Setup, _: ClientId, client: &Client, command: preview_api::Co
             let opening = (Arc::clone(&setup.mime_types), archives);
             nova_files_open_core::open_at(client.events(), opening, path, at);
         }
+        preview_api::Command::Draw {
+            id,
+            document,
+            picture,
+            fit,
+        } => {
+            let current = client.current_preview();
+            let helper = setup.thumbnails.as_ref().map(|setup| setup.helper.clone());
+            let asked = nova_files_preview_core::DrawAsked {
+                id,
+                document,
+                picture,
+                fit,
+            };
+            nova_files_preview_core::draw(client.events(), current, helper, asked);
+        }
     }
 }
 

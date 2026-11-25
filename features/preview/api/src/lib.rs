@@ -47,6 +47,16 @@ pub enum Command {
     /// starts at `at` when it is a player that can be told so. The answer
     /// is the open feature's `Opened` or `NotOpened` event.
     OpenAt { path: PathBuf, at: Duration },
+    /// Draw the picture at `picture`, which Markdown `document` shows, to
+    /// fit `fit`. Only a picture inside the document's own folder is drawn.
+    /// The answer is [`Event::Drawn`] with the same `id` and `picture`,
+    /// unless a newer preview replaced `id` first.
+    Draw {
+        id: PreviewId,
+        document: PathBuf,
+        picture: PathBuf,
+        fit: Fit,
+    },
 }
 
 /// Something the preview feature's core half tells one client.
@@ -71,6 +81,13 @@ pub enum Event {
         id: PreviewId,
         index: usize,
         picture: Option<Picture>,
+    },
+    /// The picture [`Command::Draw`] asked for; `None` when it is outside
+    /// the document's folder or couldn't be drawn.
+    Drawn {
+        id: PreviewId,
+        picture: PathBuf,
+        drawn: Option<Picture>,
     },
 }
 

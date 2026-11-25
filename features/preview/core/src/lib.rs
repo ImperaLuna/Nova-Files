@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
 mod code;
+mod drawing;
 mod markdown;
 mod media;
 
@@ -48,6 +49,7 @@ pub struct Current {
     paging: Arc<Running>,
     document: Mutex<Option<(PreviewId, Document)>>,
     playing: media::Playing,
+    drawing: drawing::Drawing,
 }
 
 const NONE: u64 = u64::MAX;
@@ -62,6 +64,7 @@ impl Current {
             paging: Arc::new(Running::new()),
             document: Mutex::new(None),
             playing: media::Playing::default(),
+            drawing: drawing::Drawing::default(),
         }
     }
 
@@ -82,6 +85,7 @@ impl Current {
     fn let_go(&self) {
         self.running.stop();
         self.paging.stop();
+        self.drawing.stop();
         let open = self
             .document
             .lock()
@@ -92,6 +96,7 @@ impl Current {
     }
 }
 
+pub use drawing::{Asked as DrawAsked, draw};
 pub use media::{control, player_beside};
 
 pub struct Request {
