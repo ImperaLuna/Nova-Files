@@ -7,6 +7,12 @@
 # release build (thin LTO) is never in the cache. Nothing waits for this job:
 # it isn't a required check and doesn't run on pull requests. Run it by
 # hand (workflow_dispatch) to fill the cache for another branch.
+#
+# Once a main commit is in the cache, the `cached` branch moves to it. A PC
+# that follows `github:ImperaLuna/Nova-Files/cached` instead of main never
+# pins a commit whose build is still running here, so it always downloads
+# the app. cachix-action uploads only after the last step, so that step
+# uploads the app itself before it moves the branch.
 name: Release build
 
 on:
@@ -21,7 +27,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: read
+  contents: write
 
 env:
   CACHIX_CACHE: nova-de
@@ -51,3 +57,8 @@ jobs:
         run: nix path-info --size --closure-size --human-readable ./result
       - name: Disk space left
         run: df -h /
+      - name: Move the cached branch to this commit
+        if: github.ref == 'refs/heads/main'
+        run: |
+          cachix push "$CACHIX_CACHE" ./result
+          git push origin HEAD:refs/heads/cached
