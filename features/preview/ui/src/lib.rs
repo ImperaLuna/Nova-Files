@@ -528,6 +528,7 @@ impl PreviewPart {
             Event::Paged { id, index, picture } => self.page_arrived(id, index, picture, cx),
             Event::Played { id, played } => self.played(id, played, cx),
             Event::Drawn { id, picture, drawn } => self.drawn(id, picture, drawn, cx),
+            Event::Figured { id, source, drawn } => self.figured(id, source, drawn, cx),
         }
     }
 
@@ -640,7 +641,7 @@ impl PreviewPart {
         if self.previewing() {
             self.start_playing();
         }
-        self.ask_pictures(id);
+        self.ask_pictures(id, cx);
         cx.notify();
     }
 }

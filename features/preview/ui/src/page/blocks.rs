@@ -3,8 +3,8 @@ use std::path::Path;
 use std::sync::Arc;
 
 use gpui::{
-    AnyElement, Div, IntoElement as _, ParentElement as _, Pixels, SharedString, Styled as _, div,
-    img, prelude::FluentBuilder as _, px,
+    AnyElement, Div, IntoElement as _, ParentElement as _, Pixels, RenderImage, SharedString,
+    Styled as _, div, img, prelude::FluentBuilder as _, px,
 };
 use nova_files_preview_api::Run;
 use nova_files_preview_api::markdown::{Align, Block, Inline, Item};
@@ -53,6 +53,7 @@ pub struct Paint {
     pub mono: SharedString,
     pub follow: Follow,
     pub pictures: Drawn,
+    pub figures: Drawn,
     pub room: (Pixels, f32),
 }
 
@@ -94,7 +95,10 @@ fn drawn(block: &Block, paint: &Paint) -> AnyElement {
             .into_any_element(),
         Block::List { first, items } => list(*first, items, paint),
         Block::Code { text, runs } => code(text, runs, paint),
-        Block::Figure { source, .. } => code(source, &[], paint),
+        Block::Figure { source, .. } => paint
+            .figures
+            .get(source)
+            .map_or_else(|| code(source, &[], paint), |image| sized(image, paint)),
         Block::Table { aligns, head, rows } => table(aligns, head, rows, paint),
         Block::Rule => div().h(size::LINE).bg(colors.line).into_any_element(),
         Block::Picture { target, alt, .. } => picture(target, alt, paint),
@@ -280,9 +284,13 @@ fn note(label: &str, blocks: &[Block], paint: &Paint) -> AnyElement {
 }
 
 fn picture(target: &Arc<str>, alt: &str, paint: &Paint) -> AnyElement {
-    let Some(image) = paint.pictures.get(target) else {
-        return unshown(target, alt, &paint.colors);
-    };
+    paint.pictures.get(target).map_or_else(
+        || unshown(target, alt, &paint.colors),
+        |image| sized(image, paint),
+    )
+}
+
+fn sized(image: &Arc<RenderImage>, paint: &Paint) -> AnyElement {
     let (room, scale_factor) = paint.room;
     let side = image.size(0);
     let (width, height) = (

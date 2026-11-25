@@ -116,6 +116,7 @@ pub fn page_art(
         mono,
         follow,
         pictures: Rc::clone(&page.pictures.drawn),
+        figures: Rc::clone(&page.pictures.figured),
         room: (
             (width - PAGE_PAD_X * BOTH_SIDES).max(Pixels::ZERO),
             scale_factor,
@@ -159,12 +160,7 @@ pub fn page_art(
 fn rows(blocks: &[Block], mono: &SharedString) -> Vec<Row> {
     let mut rows = Vec::with_capacity(blocks.len());
     for (index, block) in blocks.iter().enumerate() {
-        let code = match block {
-            Block::Code { text, runs } => Some((text, &**runs)),
-            Block::Figure { source, .. } => Some((source, &[][..])),
-            _ => None,
-        };
-        let Some((text, runs)) = code else {
+        let Block::Code { text, runs } = block else {
             rows.push(Row::Block(index));
             continue;
         };

@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
 
 use nova_files_api::{EventSink, Fit, Picture};
+use nova_files_preview_api::markdown::FigureKind;
 use nova_files_preview_api::{Event, PreviewId};
 use nova_files_thumbnailer_launch::{self as launch, Running};
 
@@ -34,23 +35,83 @@ pub fn draw(
     helper: Option<PathBuf>,
     asked: Asked,
 ) {
+    let (id, picture) = (asked.id, asked.picture.clone());
+    let failed = Event::Drawn {
+        id,
+        picture: picture.clone(),
+        drawn: None,
+    };
+    answer_aside(events, current, (id, failed), move |current| {
+        let drawn = helper
+            .as_deref()
+            .and_then(|helper| drawn(current, helper, &asked));
+        Event::Drawn { id, picture, drawn }
+    });
+}
+
+fn answer_aside(
+    events: &Arc<dyn EventSink>,
+    current: &Arc<Current>,
+    (id, failed): (PreviewId, Event),
+    work: impl FnOnce(&Current) -> Event + Send + 'static,
+) {
     let sink = Arc::clone(events);
     let current = Arc::clone(current);
-    let (id, picture) = (asked.id, asked.picture.clone());
     let spawned = thread::Builder::new()
         .name(THREAD_NAME.to_owned())
         .spawn(move || {
-            let drawn = helper
-                .as_deref()
-                .and_then(|helper| drawn(&current, helper, &asked));
-            if current.is(asked.id) {
-                let (id, picture) = (asked.id, asked.picture);
-                sink.deliver(Event::Drawn { id, picture, drawn }).ok();
+            let event = work(&current);
+            if current.is(id) {
+                sink.deliver(event).ok();
             }
         });
     if spawned.is_err() {
-        let drawn = None;
-        events.deliver(Event::Drawn { id, picture, drawn }).ok();
+        events.deliver(failed).ok();
+    }
+}
+
+pub struct FigureAsked {
+    pub id: PreviewId,
+    pub kind: FigureKind,
+    pub source: Arc<str>,
+    pub zoom_percent: u16,
+    pub light: bool,
+    pub fit: Fit,
+}
+
+pub fn figure(
+    events: &Arc<dyn EventSink>,
+    current: &Arc<Current>,
+    helper: Option<PathBuf>,
+    asked: FigureAsked,
+) {
+    let (id, source) = (asked.id, Arc::clone(&asked.source));
+    let failed = Event::Figured {
+        id,
+        source: Arc::clone(&source),
+        drawn: None,
+    };
+    answer_aside(events, current, (id, failed), move |current| {
+        let drawn = helper
+            .as_deref()
+            .and_then(|helper| figured(current, helper, &asked));
+        Event::Figured { id, source, drawn }
+    });
+}
+
+fn figured(current: &Current, helper: &Path, asked: &FigureAsked) -> Option<Picture> {
+    let drawing = &current.drawing;
+    let _turn = drawing.turn.lock().unwrap_or_else(PoisonError::into_inner);
+    let wanted = || current.is(asked.id);
+    if !wanted() {
+        return None;
+    }
+    match asked.kind {
+        FigureKind::Diagram => {
+            let source = (&*asked.source, asked.zoom_percent, asked.light);
+            launch::diagram(helper, source, asked.fit, &drawing.running, wanted)
+        }
+        FigureKind::Formula => None,
     }
 }
 

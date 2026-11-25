@@ -73,7 +73,7 @@ pub fn run(request: &Request) -> ExitCode {
     }
 }
 
-fn send_still(image: &RgbaImage) -> io::Result<()> {
+pub fn send_still(image: &RgbaImage) -> io::Result<()> {
     let mut out = io::stdout().lock();
     writeln!(out, "{} {}", image.width(), image.height())?;
     out.write_all(image.as_raw())?;

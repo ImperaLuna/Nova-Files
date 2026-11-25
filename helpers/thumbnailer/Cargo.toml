@@ -7,6 +7,7 @@
 # - hayro
 # - image
 # - landlock
+# - mermaid-svg
 # - resvg
 # - rustix
 # Allowed workspace crates: none
@@ -23,6 +24,8 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+# Lays out Mermaid diagrams as SVG in pure Rust, for Markdown quick looks.
+mermaid-svg = { version = "0.7.0", default-features = false }
 # Reads PDF pages in pure Rust, so a document needs nothing installed.
 hayro = "0.9.0"
 # Only the formats the helper decodes itself; the rest go to the system's
