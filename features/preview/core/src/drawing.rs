@@ -76,6 +76,7 @@ pub struct FigureAsked {
     pub source: Arc<str>,
     pub zoom_percent: u16,
     pub light: bool,
+    pub ink: u32,
     pub fit: Fit,
 }
 
@@ -110,7 +111,7 @@ fn figured(current: &Current, helper: &Path, asked: &FigureAsked) -> Option<Pict
         FigureKind::Diagram => launch::Figure::Diagram,
         FigureKind::Formula => launch::Figure::Formula,
     };
-    let looks = (asked.zoom_percent, asked.light, asked.fit);
+    let looks = (asked.zoom_percent, (asked.light, asked.ink), asked.fit);
     let source = (figure, &*asked.source);
     launch::figure(helper, source, looks, &drawing.running, wanted)
 }

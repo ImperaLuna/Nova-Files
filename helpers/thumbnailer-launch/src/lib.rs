@@ -150,7 +150,7 @@ pub enum Figure {
 pub fn figure(
     helper: &Path,
     (figure, source): (Figure, &str),
-    (zoom_percent, light, fit): (u16, bool, Fit),
+    (zoom_percent, (light, ink), fit): (u16, (bool, u32), Fit),
     running: &Running,
     wanted: impl Fn() -> bool,
 ) -> Option<Picture> {
@@ -166,6 +166,7 @@ pub fn figure(
         .arg(fit.height.to_string())
         .arg(zoom_percent.to_string())
         .arg(if light { LIGHT_WORD } else { DARK_WORD })
+        .arg(format!("{ink:06X}"))
         .arg(source);
     let mut frames = pictures_from(command, fit, running, wanted)?;
     (frames.len() == 1).then(|| frames.remove(0).0)

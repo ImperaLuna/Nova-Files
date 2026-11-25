@@ -251,6 +251,7 @@ fn preview(setup: &Setup, _: ClientId, client: &Client, command: preview_api::Co
             source,
             zoom_percent,
             light,
+            ink,
             fit,
         } => {
             let current = client.current_preview();
@@ -261,6 +262,7 @@ fn preview(setup: &Setup, _: ClientId, client: &Client, command: preview_api::Co
                 source,
                 zoom_percent,
                 light,
+                ink,
                 fit,
             };
             nova_files_preview_core::figure(client.events(), current, helper, asked);

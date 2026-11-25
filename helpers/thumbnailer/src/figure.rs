@@ -8,12 +8,12 @@ use mermaid_svg::Theme;
 use crate::{preview, sandbox, vector};
 
 pub const FLAG: &str = "--figure";
-pub const USAGE: &str = "usage: nova-files-thumbnailer --figure <diagram|formula> <width> <height> <zoom percent> <light|dark> <source>";
+pub const USAGE: &str = "usage: nova-files-thumbnailer --figure <diagram|formula> <width> <height> <zoom percent> <light|dark> <ink RRGGBB> <source>";
 const DIAGRAM_WORD: &str = "diagram";
 const FORMULA_WORD: &str = "formula";
 const FORMULA_POINTS: i64 = 14;
-const DARK_INK: (u8, u8, u8) = (0xE0, 0xE0, 0xE0);
-const LIGHT_INK: (u8, u8, u8) = (0x16, 0x16, 0x16);
+const HEX_RADIX: u32 = 16;
+const INK_DIGITS: usize = 6;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
@@ -32,6 +32,7 @@ pub struct Request {
     pub height: u32,
     pub zoom: f32,
     pub light: bool,
+    pub ink: (u8, u8, u8),
     pub source: String,
 }
 
@@ -58,6 +59,7 @@ impl Request {
             DARK_WORD => false,
             _ => return None,
         };
+        let ink = ink(args.next()?.to_str()?)?;
         let source = args.next()?.into_string().ok()?;
         (source.len() <= MAX_SOURCE_BYTES && args.next().is_none()).then_some(Self {
             kind,
@@ -65,6 +67,7 @@ impl Request {
             height,
             zoom,
             light,
+            ink,
             source,
         })
     }
@@ -99,13 +102,21 @@ fn drawing(request: &Request) -> Option<String> {
             };
             mermaid_svg::render_with(&request.source, &theme).ok()
         }
-        Kind::Formula => formula(&request.source, request.light),
+        Kind::Formula => formula(&request.source, request.ink),
     }
 }
 
-fn formula(source: &str, light: bool) -> Option<String> {
+fn ink(hex: &str) -> Option<(u8, u8, u8)> {
+    if hex.len() != INK_DIGITS {
+        return None;
+    }
+    let ink = u32::from_str_radix(hex, HEX_RADIX).ok()?;
+    let [_, red, green, blue] = ink.to_be_bytes();
+    Some((red, green, blue))
+}
+
+fn formula(source: &str, (red, green, blue): (u8, u8, u8)) -> Option<String> {
     let font = MathFont::stix_two_math().ok()?;
-    let (red, green, blue) = if light { LIGHT_INK } else { DARK_INK };
     let options = SvgOptions {
         font_size_pt: Dim::from_i64(FORMULA_POINTS),
         color: Color::rgb(red, green, blue),
@@ -130,6 +141,7 @@ mod tests {
             "600",
             "200",
             "dark",
+            "E0E0E0",
             "graph TD; A-->B",
         ]))
         .unwrap();
@@ -137,17 +149,33 @@ mod tests {
         assert!((request.zoom - 2.0).abs() < f32::EPSILON);
         assert_eq!(request.source, "graph TD; A-->B");
         assert_eq!(request.kind, Kind::Diagram);
-        assert!(Request::from_args(args(&["chart", "8", "6", "100", "dark", "x"])).is_none());
+        assert_eq!(ink("FD7014"), Some((0xFD, 0x70, 0x14)));
+        assert_eq!(ink("FD70"), None);
         assert!(
-            Request::from_args(args(&["diagram", "800", "600", "0", "dark", "graph TD"])).is_none()
+            Request::from_args(args(&["chart", "8", "6", "100", "dark", "E0E0E0", "x"])).is_none()
         );
         assert!(
-            Request::from_args(args(&["diagram", "800", "600", "100", "pink", "graph TD"]))
-                .is_none()
+            Request::from_args(args(&[
+                "diagram", "800", "600", "0", "dark", "E0E0E0", "graph TD"
+            ]))
+            .is_none()
         );
-        assert!(Request::from_args(args(&["diagram", "800", "600", "100", "dark"])).is_none());
+        assert!(
+            Request::from_args(args(&[
+                "diagram", "800", "600", "100", "pink", "E0E0E0", "graph TD"
+            ]))
+            .is_none()
+        );
+        assert!(
+            Request::from_args(args(&["diagram", "800", "600", "100", "dark", "E0E0E0"])).is_none()
+        );
         let long = "a".repeat(MAX_SOURCE_BYTES + 1);
-        assert!(Request::from_args(args(&["formula", "8", "6", "100", "light", &long])).is_none());
+        assert!(
+            Request::from_args(args(&[
+                "formula", "8", "6", "100", "light", "161616", &long
+            ]))
+            .is_none()
+        );
     }
 
     #[test]
@@ -162,10 +190,10 @@ mod tests {
 
     #[test]
     fn a_formula_is_drawn_and_broken_maths_is_refused() {
-        let drawing = formula(r"\frac{a}{b} + \sqrt{x^2}", false).unwrap();
+        let drawing = formula(r"\frac{a}{b} + \sqrt{x^2}", (0xE0, 0xE0, 0xE0)).unwrap();
         let image = vector::draw_data(drawing.as_bytes(), (4000, 4000), Some(1.0)).unwrap();
         assert!(image.width() > image.height());
         assert!(image.pixels().any(|pixel| pixel.0[3] > 0));
-        assert!(formula(r"\frac{a}{", false).is_none());
+        assert!(formula(r"\frac{a}{", (0, 0, 0)).is_none());
     }
 }
