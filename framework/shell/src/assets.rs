@@ -56,10 +56,13 @@ pub enum Icon {
     NewFile,
     Duplicate,
     Link,
+    Play,
+    Pause,
+    Volume,
 }
 
 impl Icon {
-    const ALL: [Self; 50] = [
+    const ALL: [Self; 53] = [
         Self::Folder,
         Self::File,
         Self::FileText,
@@ -110,6 +113,9 @@ impl Icon {
         Self::NewFile,
         Self::Duplicate,
         Self::Link,
+        Self::Play,
+        Self::Pause,
+        Self::Volume,
     ];
 
     pub const fn path(self) -> &'static str {
@@ -163,6 +169,9 @@ impl Icon {
             Self::Terminal => "icons/terminal.svg",
             Self::NewFile => "icons/new-file.svg",
             Self::Link => "icons/link.svg",
+            Self::Play => "icons/play.svg",
+            Self::Pause => "icons/pause.svg",
+            Self::Volume => "icons/volume.svg",
             Self::Duplicate => "icons/duplicate.svg",
         }
     }
@@ -219,6 +228,9 @@ impl Icon {
             Self::NewFile => svg::NEW_FILE,
             Self::Link => svg::LINK,
             Self::Duplicate => svg::DUPLICATE,
+            Self::Play => svg::PLAY,
+            Self::Pause => svg::PAUSE,
+            Self::Volume => svg::VOLUME,
         };
         source.as_bytes()
     }

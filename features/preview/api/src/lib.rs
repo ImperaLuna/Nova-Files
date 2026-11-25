@@ -170,13 +170,16 @@ pub enum Control {
     Volume(u8),
     /// Frames from now on fit this box.
     Fit(Fit),
+    /// The last [`Played::Frame`] is drawn. No newer frame is sent until
+    /// then, so frames never pile up behind a busy window.
+    Drawn,
 }
 
 /// One thing a playing video or song did.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Played {
     /// The newest frame, upright, fitted to the request's box: a video's
-    /// picture, or a song's cover.
+    /// picture, or a song's cover. Answer it with [`Control::Drawn`].
     Frame(Picture),
     /// Where playback is now.
     At(Duration),

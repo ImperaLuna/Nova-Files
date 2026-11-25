@@ -61,6 +61,9 @@ impl Client {
             match self.events.recv_timeout(left).unwrap() {
                 Event::Played { id, played } if id == ID => {
                     assert_ne!(played, Played::Unplayable, "libmpv must be installed");
+                    if matches!(played, Played::Frame(_)) {
+                        self.control(Control::Drawn);
+                    }
                     let done = wanted(&played);
                     seen.push(played);
                     if done {
@@ -110,13 +113,18 @@ fn start(client: &Client, path: &Path) {
     }
 }
 
+fn play(client: &Client, path: &Path) {
+    start(client, path);
+    client.control(Control::Play);
+}
+
 #[test]
 fn a_video_plays_with_frames_fitted_to_the_box_and_its_length() {
     let temp = TestFolder::new("play-video");
     let path = clip(&temp);
     let client = Client::new(temp.path());
 
-    start(&client, &path);
+    play(&client, &path);
 
     let seen = client.played_until(|played| matches!(played, Played::Ended));
     let frame = seen.iter().find_map(|played| match played {
@@ -142,8 +150,8 @@ fn pausing_and_seeking_are_reported_back() {
     let temp = TestFolder::new("play-seek");
     let path = clip(&temp);
     let client = Client::new(temp.path());
-    start(&client, &path);
-    client.played_until(|played| matches!(played, Played::Frame(_)));
+    play(&client, &path);
+    client.played_until(|played| *played == Played::Paused(false));
 
     client.control(Control::Pause);
     client.played_until(|played| *played == Played::Paused(true));
@@ -156,14 +164,12 @@ fn pausing_and_seeking_are_reported_back() {
 }
 
 #[test]
-fn a_paused_video_is_drawn_again_at_a_new_size() {
+fn a_video_starts_paused_on_its_first_frame_and_is_drawn_again_at_a_new_size() {
     let temp = TestFolder::new("play-resize");
     let path = clip(&temp);
     let client = Client::new(temp.path());
     start(&client, &path);
     client.played_until(|played| matches!(played, Played::Frame(_)));
-    client.control(Control::Pause);
-    client.played_until(|played| *played == Played::Paused(true));
 
     client.control(Control::Fit(SMALLER));
 

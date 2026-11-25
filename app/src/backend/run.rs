@@ -220,7 +220,8 @@ fn preview(setup: &Setup, _: ClientId, client: &Client, command: preview_api::Co
             nova_files_preview_core::page(client.events(), current, id, index, width);
         }
         preview_api::Command::Control { id, control } => {
-            nova_files_preview_core::control(client.current_preview(), id, control);
+            let current = client.current_preview();
+            nova_files_preview_core::control(client.events().as_ref(), current, id, control);
         }
         preview_api::Command::Closed => client.current_preview().cancel(),
     }

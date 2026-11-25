@@ -21,8 +21,10 @@ const FRAME_WAIT: Duration = Duration::from_millis(50);
 const BYTES_PER_PIXEL: usize = 4;
 const ALPHA: usize = 3;
 const OPAQUE: u8 = 255;
-const OPTIONS: [(&str, &str); 10] = [
+const OPTIONS: [(&str, &str); 12] = [
     ("vo", "libmpv"),
+    ("ao", "pipewire,pulse,alsa,null"),
+    ("pause", "yes"),
     ("config", "no"),
     ("terminal", "no"),
     ("keep-open", "yes"),
