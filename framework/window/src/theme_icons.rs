@@ -8,7 +8,7 @@ use nova_files_api::{IconFormat, ThemeIcon};
 use nova_files_shell::shrink::shrink;
 
 // GPUI's renderer draws at twice the scale it is asked for.
-// https://github.com/ImperaLuna/zed/tree/47424cdc3f1a49829960e1ecbcdcdd967d034265/crates/gpui
+// https://github.com/ImperaLuna/zed/tree/2033650502b1d0ec524b8913bf5a01b9463bed5d/crates/gpui
 pub const RENDERER_SCALE: f32 = 2.0;
 const ROUNDING: f32 = 0.5;
 

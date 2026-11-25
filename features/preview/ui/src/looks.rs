@@ -12,7 +12,7 @@ use crate::pages::Pages;
 use crate::player::Media;
 
 // GPUI draws images in BGRA order.
-// https://github.com/ImperaLuna/zed/tree/47424cdc3f1a49829960e1ecbcdcdd967d034265/crates/gpui
+// https://github.com/ImperaLuna/zed/tree/2033650502b1d0ec524b8913bf5a01b9463bed5d/crates/gpui
 const RED: usize = 0;
 const BLUE: usize = 2;
 const BYTES_PER_PIXEL: usize = 4;
