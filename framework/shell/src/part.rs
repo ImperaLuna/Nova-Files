@@ -63,6 +63,7 @@ pub struct Asking<'a> {
 
 pub type Busy<P> = fn(&P, &App) -> bool;
 pub type RowIcon<P> = fn(&P, &Entry, Pixels, &App) -> Option<AnyElement>;
+pub type RowMark<P> = fn(&P, &Entry, &App) -> Option<AnyElement>;
 pub type RowPicture<P> = fn(&P, &Entry, &App) -> Option<Arc<RenderImage>>;
 pub type Opens<P> = fn(&mut P, &Entry, &Path, &mut Context<P>) -> bool;
 pub type Closing<P> = fn(&mut P, &mut Context<P>);
@@ -191,6 +192,7 @@ pub struct Slots<P> {
     pub(crate) islands: Vec<(Applies<P>, Card<P>)>,
     pub(crate) questions: Vec<(&'static Question, Asks<P>, Card<P>)>,
     pub(crate) row_icons: Vec<RowIcon<P>>,
+    pub(crate) row_marks: Vec<RowMark<P>>,
     pub(crate) row_pictures: Vec<RowPicture<P>>,
     pub(crate) opens: Vec<Opens<P>>,
     pub(crate) typed: Vec<Typed<P>>,
@@ -254,6 +256,7 @@ impl<P> Default for Slots<P> {
             islands: Vec::new(),
             questions: Vec::new(),
             row_icons: Vec::new(),
+            row_marks: Vec::new(),
             row_pictures: Vec::new(),
             opens: Vec::new(),
             typed: Vec::new(),
@@ -496,6 +499,10 @@ impl<P: Part> Slots<P> {
 
     pub fn row_icon(&mut self, icon: RowIcon<P>) {
         self.row_icons.push(icon);
+    }
+
+    pub fn row_mark(&mut self, mark: RowMark<P>) {
+        self.row_marks.push(mark);
     }
 
     pub fn row_picture(&mut self, picture: RowPicture<P>) {

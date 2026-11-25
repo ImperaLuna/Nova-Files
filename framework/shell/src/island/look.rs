@@ -1,10 +1,11 @@
 use gpui::{
-    BoxShadow, Div, ElementId, Hsla, InteractiveElement as _, IntoElement, ParentElement as _,
-    SharedString, Stateful, StatefulInteractiveElement as _, Styled as _, Transformation, div,
-    point, prelude::FluentBuilder as _, px, radians, svg,
+    BoxShadow, Div, ElementId, Entity, Hsla, InteractiveElement as _, IntoElement,
+    ParentElement as _, SharedString, Stateful, StatefulInteractiveElement as _, Styled as _,
+    Transformation, div, point, prelude::FluentBuilder as _, px, radians, svg,
 };
 
 use crate::assets::Icon;
+use crate::text::TextField;
 use crate::theme::{Colors, radius, size, text};
 
 const POINT_UP: f32 = 270.0_f32.to_radians();
@@ -126,6 +127,26 @@ pub fn worded(
         .px(size::TEXT_BUTTON_PAD)
         .font_weight(text::STRONG_WEIGHT)
         .child(words.into())
+}
+
+pub const PASSWORD_NEEDED: &str = ": needs a password";
+pub const PASSWORD_WRONG: &str = ": wrong password";
+
+pub fn password_box(field: Entity<TextField>, colors: &Colors) -> Div {
+    div()
+        .debug_selector(|| "island-password".to_owned())
+        .flex()
+        .flex_none()
+        .items_center()
+        .w(size::PASSWORD_WIDTH)
+        .h(size::RENAME_HEIGHT)
+        .px(size::RENAME_PAD)
+        .rounded(radius::SMALL)
+        .bg(colors.window)
+        .border(size::RING)
+        .border_color(colors.accept)
+        .text_color(colors.text)
+        .child(field)
 }
 
 pub fn chevron(open: bool, colors: &Colors) -> impl IntoElement {

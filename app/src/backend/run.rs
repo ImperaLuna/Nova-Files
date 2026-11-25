@@ -93,6 +93,7 @@ pub fn routes() -> Result<Routes<Setup, Client>, MessageType> {
     routes.on(|setup: &Setup, id, client: &Client, command| {
         match command {
             git_api::Command::Repos(folders) => setup.git.read(id, client.events(), folders),
+            git_api::Command::Marks(folder) => setup.git.mark(id, client.events(), folder),
         }
         Ok(())
     })?;

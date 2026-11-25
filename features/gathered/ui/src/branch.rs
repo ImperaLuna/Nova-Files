@@ -7,15 +7,13 @@ use gpui::{
     Styled as _, div,
 };
 use nova_files_api::Listing;
-use nova_files_git_api::{Command, Event, Head, Repo};
+use nova_files_git_api::{Command, Event, Repo};
 use nova_files_shell::theme::{Colors, size};
 use nova_files_shell::widgets::detail;
 
 pub const BRANCH_LABEL: &str = "Branch";
 pub const BRANCH_HEAD: &str = "head-branch";
 const CHANGES_PREFIX: &str = "changes-";
-const AHEAD: char = '↑';
-const BEHIND: char = '↓';
 
 #[derive(Default)]
 pub struct Repos {
@@ -55,6 +53,7 @@ impl Repos {
             Event::Repo { folder, .. } => {
                 self.known.remove(&folder);
             }
+            Event::Marks { .. } => {}
         }
     }
 
@@ -66,9 +65,7 @@ impl Repos {
 pub fn cell(repo: &Repo, name: &str, cx: &App) -> AnyElement {
     let colors = Colors::of(cx);
     let selector = format!("{CHANGES_PREFIX}{name}");
-    let head = match &repo.head {
-        Head::Branch(name) | Head::Detached(name) => name.clone(),
-    };
+    let head = repo.head.name().to_owned();
     div()
         .flex()
         .items_center()
@@ -78,7 +75,10 @@ pub fn cell(repo: &Repo, name: &str, cx: &App) -> AnyElement {
             cell.child(dot(&colors).debug_selector(move || selector))
         })
         .child(detail(head, &colors).text_color(colors.text_soft))
-        .children(counts(repo).map(|counts| detail(counts, &colors).flex_none()))
+        .children(
+            repo.counts()
+                .map(|counts| detail(counts, &colors).flex_none()),
+        )
         .into_any_element()
 }
 
@@ -88,33 +88,4 @@ fn dot(colors: &Colors) -> Div {
         .size(size::MARK_DOT)
         .rounded_full()
         .bg(colors.changed)
-}
-
-pub fn counts(repo: &Repo) -> Option<String> {
-    let ahead = (repo.ahead > 0).then(|| format!("{AHEAD}{}", repo.ahead));
-    let behind = (repo.behind > 0).then(|| format!("{BEHIND}{}", repo.behind));
-    let both: Vec<String> = ahead.into_iter().chain(behind).collect();
-    (!both.is_empty()).then(|| both.join(" "))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn on_main(ahead: u32, behind: u32) -> Repo {
-        Repo {
-            head: Head::Branch("main".to_owned()),
-            changed: false,
-            ahead,
-            behind,
-        }
-    }
-
-    #[test]
-    fn counts_show_only_what_is_not_zero() {
-        assert_eq!(counts(&on_main(0, 0)), None);
-        assert_eq!(counts(&on_main(2, 0)).as_deref(), Some("↑2"));
-        assert_eq!(counts(&on_main(0, 3)).as_deref(), Some("↓3"));
-        assert_eq!(counts(&on_main(2, 1)).as_deref(), Some("↑2 ↓1"));
-    }
 }

@@ -9,6 +9,7 @@ mod window_band;
 mod window_drag;
 mod window_filter;
 mod window_gathered;
+mod window_git;
 mod window_island;
 mod window_keys;
 mod window_opens_with;

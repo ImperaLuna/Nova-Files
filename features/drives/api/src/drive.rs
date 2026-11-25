@@ -76,6 +76,21 @@ pub struct Volume {
     pub device: OsString,
     /// Whether it can only be read.
     pub read_only: bool,
+    /// Whether it is encrypted and still locked: it holds no files a
+    /// client can open until [`DriveAction::Unlock`] opens it, after which
+    /// what is inside shows as a volume of its own and this one is gone.
+    pub locked: bool,
+}
+
+/// What a person types to unlock an encrypted volume. It never shows in
+/// debug output.
+#[derive(Clone, PartialEq, Eq)]
+pub struct Password(pub String);
+
+impl fmt::Debug for Password {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("Password(..)")
+    }
 }
 
 /// Something a client asks done to a drive or volume.
@@ -85,8 +100,12 @@ pub enum DriveAction {
     Mount(VolumeId),
     /// Unmount the volume.
     Unmount(VolumeId),
-    /// Make the drive safe to unplug: unmount every volume on it, eject
-    /// its media and switch it off, whichever it supports.
+    /// Unlock the locked volume with the password, then mount what is
+    /// inside where the system mounts removable media.
+    Unlock(VolumeId, Password),
+    /// Make the drive safe to unplug: unmount every volume on it, lock
+    /// what was unlocked, eject its media and switch it off, whichever it
+    /// supports.
     Eject(DriveId),
 }
 
@@ -99,6 +118,8 @@ pub enum DriveFailure {
     NotAuthorized,
     /// The person closed the password dialog.
     Cancelled,
+    /// The password doesn't unlock the volume.
+    WrongPassword,
     /// The drive or volume is no longer there.
     Gone,
     /// The drive holds a volume the running system is mounted from, so
@@ -123,8 +144,8 @@ pub trait DriveService: Send + Sync + 'static {
     fn follow(&self, seen: Box<dyn Fn(DriveList) + Send + Sync>);
 
     /// Does `action` and waits until it is done, which may take as long as
-    /// a person takes to type a password. A mount answers with where the
-    /// volume is now; the others with `None`. Called on a thread of the
+    /// a person takes to type a password. A mount or an unlock answers
+    /// with where the volume is now; the others with `None`. Called on a thread of the
     /// core's own.
     ///
     /// # Errors
@@ -141,5 +162,17 @@ pub struct DriveOffer(pub Arc<dyn DriveService>);
 impl fmt::Debug for DriveOffer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("DriveOffer")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_password_never_shows_in_debug_output() {
+        let action =
+            DriveAction::Unlock(VolumeId("sdc1".to_owned()), Password("hunter2".to_owned()));
+        assert!(!format!("{action:?}").contains("hunter2"));
     }
 }

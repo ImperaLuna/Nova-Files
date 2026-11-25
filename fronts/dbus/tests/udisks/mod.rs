@@ -54,6 +54,7 @@ pub struct Block {
     pub hint_ignore: bool,
     pub hint_system: bool,
     pub hint_name: String,
+    pub crypto_backing_device: String,
 }
 
 #[zbus::interface(name = "org.freedesktop.UDisks2.Block")]
@@ -101,6 +102,91 @@ impl Block {
     #[zbus(property)]
     fn hint_name(&self) -> String {
         self.hint_name.clone()
+    }
+    #[zbus(property)]
+    fn crypto_backing_device(&self) -> OwnedObjectPath {
+        object_path(&self.crypto_backing_device)
+    }
+}
+
+#[derive(Clone)]
+pub struct Encrypted {
+    pub path: String,
+    pub password: String,
+    pub unlock_fails: Option<Failure>,
+    pub cleartext_device: String,
+    pub inside: Box<Object>,
+    pub calls: Calls,
+}
+
+#[zbus::interface(name = "org.freedesktop.UDisks2.Encrypted")]
+impl Encrypted {
+    #[zbus(property)]
+    fn cleartext_device(&self) -> OwnedObjectPath {
+        object_path(&self.cleartext_device)
+    }
+
+    async fn unlock(
+        &mut self,
+        passphrase: String,
+        options: HashMap<String, OwnedValue>,
+        #[zbus(object_server)] server: &zbus::ObjectServer,
+        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
+    ) -> Result<OwnedObjectPath, Failure> {
+        no_options(options);
+        self.calls
+            .lock()
+            .unwrap()
+            .push(format!("unlock {}", self.path));
+        if let Some(failure) = &self.unlock_fails {
+            return Err(failure.clone());
+        }
+        if passphrase != self.password {
+            return Err(Failure::Failed(format!(
+                "Error unlocking {}: Failed to activate device: Operation not permitted",
+                self.path
+            )));
+        }
+        let inside = self.inside.path.as_str();
+        if let Some(block) = &self.inside.block {
+            server.at(inside, block.clone()).await?;
+        }
+        if let Some(filesystem) = &self.inside.filesystem {
+            server
+                .at(inside, served(inside, &self.calls, filesystem))
+                .await?;
+        }
+        inside.clone_into(&mut self.cleartext_device);
+        self.cleartext_device_changed(&emitter).await?;
+        Ok(object_path(inside))
+    }
+
+    async fn lock(
+        &mut self,
+        options: HashMap<String, OwnedValue>,
+        #[zbus(object_server)] server: &zbus::ObjectServer,
+        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
+    ) -> Result<(), Failure> {
+        no_options(options);
+        self.calls
+            .lock()
+            .unwrap()
+            .push(format!("lock {}", self.path));
+        let inside = self.inside.path.as_str();
+        server.remove::<Filesystem, _>(inside).await?;
+        server.remove::<Block, _>(inside).await?;
+        NONE.clone_into(&mut self.cleartext_device);
+        self.cleartext_device_changed(&emitter).await?;
+        Ok(())
+    }
+}
+
+fn served(path: &str, calls: &Calls, filesystem: &Filesystem) -> Filesystem {
+    Filesystem {
+        path: path.to_owned(),
+        mounts_at: format!("/run/media/me/{}", path.rsplit('/').next().unwrap()),
+        calls: Arc::clone(calls),
+        ..filesystem.clone()
     }
 }
 
@@ -253,6 +339,7 @@ pub struct Object {
     pub filesystem: Option<Filesystem>,
     pub partition: Option<Partition>,
     pub drive: Option<Drive>,
+    pub encrypted: Option<Encrypted>,
 }
 
 impl Object {
@@ -263,6 +350,7 @@ impl Object {
             filesystem: None,
             partition: None,
             drive: None,
+            encrypted: None,
         }
     }
 }
@@ -279,6 +367,7 @@ fn block(device: &str, size: u64) -> Block {
         hint_ignore: false,
         hint_system: true,
         hint_name: String::new(),
+        crypto_backing_device: NONE.to_owned(),
     }
 }
 
@@ -325,6 +414,9 @@ pub const EMPTY_LOOP: &str = "/org/freedesktop/UDisks2/block_devices/loop3";
 pub const ZRAM: &str = "/org/freedesktop/UDisks2/block_devices/zram0";
 pub const STICK: &str = "/org/freedesktop/UDisks2/drives/SanDisk_Ultra_4C530001";
 pub const STICK_VOLUME: &str = "/org/freedesktop/UDisks2/block_devices/sdb1";
+pub const LOCKED_VOLUME: &str = "/org/freedesktop/UDisks2/block_devices/sdb1";
+pub const LOCKED_INSIDE: &str = "/org/freedesktop/UDisks2/block_devices/dm_2d0";
+pub const LOCKED_PASSWORD: &str = "hunter2";
 pub const NVME: &str = "/org/freedesktop/UDisks2/drives/Samsung_SSD_980_S64DNX0R";
 pub const NVME_BOOT: &str = "/org/freedesktop/UDisks2/block_devices/nvme0n1p1";
 pub const NVME_ROOT: &str = "/org/freedesktop/UDisks2/block_devices/nvme0n1p2";
@@ -425,6 +517,37 @@ pub fn stick() -> Vec<Object> {
     ]
 }
 
+pub fn locked_stick() -> Vec<Object> {
+    let inside = Object {
+        block: Some(Block {
+            crypto_backing_device: LOCKED_VOLUME.to_owned(),
+            ..with_filesystem(block("/dev/dm-0", 30_735_859_712), "ext4", "Vault")
+        }),
+        filesystem: Some(mounted(&[])),
+        ..Object::empty(LOCKED_INSIDE)
+    };
+    let mut objects = stick();
+    objects[1] = Object {
+        block: Some(Block {
+            drive: STICK.to_owned(),
+            hint_system: false,
+            id_usage: "crypto".to_owned(),
+            id_type: "crypto_LUKS".to_owned(),
+            ..block("/dev/sdb1", 30_752_636_928)
+        }),
+        encrypted: Some(Encrypted {
+            path: String::new(),
+            password: LOCKED_PASSWORD.to_owned(),
+            unlock_fails: None,
+            cleartext_device: NONE.to_owned(),
+            inside: Box::new(inside),
+            calls: Calls::default(),
+        }),
+        ..Object::empty(LOCKED_VOLUME)
+    };
+    objects
+}
+
 pub fn laptop_disk() -> Vec<Object> {
     let system = |device: &str, kind: &str| Block {
         drive: NVME.to_owned(),
@@ -496,13 +619,17 @@ impl StandIn {
             server.at(path, block.clone()).unwrap();
         }
         if let Some(filesystem) = &object.filesystem {
-            let filesystem = Filesystem {
+            server
+                .at(path, served(path, &self.calls, filesystem))
+                .unwrap();
+        }
+        if let Some(encrypted) = &object.encrypted {
+            let encrypted = Encrypted {
                 path: path.to_owned(),
-                mounts_at: format!("/run/media/me/{}", path.rsplit('/').next().unwrap()),
                 calls: Arc::clone(&self.calls),
-                ..filesystem.clone()
+                ..encrypted.clone()
             };
-            server.at(path, filesystem).unwrap();
+            server.at(path, encrypted).unwrap();
         }
         if let Some(partition) = &object.partition {
             server.at(path, partition.clone()).unwrap();
@@ -520,6 +647,7 @@ impl StandIn {
     pub fn remove(&self, path: &str) {
         let server = self.connection.object_server();
         server.remove::<Filesystem, _>(path).ok();
+        server.remove::<Encrypted, _>(path).ok();
         server.remove::<Partition, _>(path).ok();
         server.remove::<Drive, _>(path).ok();
         server.remove::<Block, _>(path).ok();

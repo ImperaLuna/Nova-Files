@@ -2,14 +2,14 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use nova_files_drives_api::{DriveAction, DriveFailure, DriveId, VolumeId};
+use nova_files_drives_api::{DriveAction, DriveFailure, DriveId, Password, VolumeId};
 use zbus::DBusError as _;
 use zbus::blocking::fdo::ObjectManagerProxy;
 use zbus::blocking::{Connection, Proxy, proxy};
 use zbus::proxy::CacheProperties;
 use zbus::zvariant::{OwnedObjectPath, Value};
 
-use super::objects::{self, DRIVE, FILESYSTEM};
+use super::objects::{self, CLEARTEXT_DEVICE, DRIVE, ENCRYPTED, FILESYSTEM};
 use super::{UDISKS, UDISKS_PATH};
 use crate::{Bus, connect_within_timeout};
 
@@ -17,7 +17,14 @@ pub const ACTION_TIMEOUT: Duration = Duration::from_mins(2);
 
 const MOUNT: &str = "Mount";
 const UNMOUNT: &str = "Unmount";
+const UNLOCK: &str = "Unlock";
+const LOCK: &str = "Lock";
 const EJECT: &str = "Eject";
+const WRONG_PASSWORD: [&str; 3] = [
+    "Operation not permitted",
+    "ncorrect passphrase",
+    "No key available",
+];
 const POWER_OFF: &str = "PowerOff";
 
 const BUSY: [&str; 1] = ["org.freedesktop.UDisks2.Error.DeviceBusy"];
@@ -55,13 +62,42 @@ pub fn act(bus: Bus, action: &DriveAction) -> Result<Option<PathBuf>, DriveFailu
     match action {
         DriveAction::Mount(volume) => mount(&connection, volume).map(Some),
         DriveAction::Unmount(volume) => unmount(&connection, &object(&volume.0)?).map(|()| None),
+        DriveAction::Unlock(volume, password) => unlock(&connection, volume, password).map(Some),
         DriveAction::Eject(drive) => eject(&connection, drive).map(|()| None),
     }
 }
 
 fn mount(connection: &Connection, volume: &VolumeId) -> Result<PathBuf, DriveFailure> {
+    mount_at(connection, &object(&volume.0)?)
+}
+
+fn unlock(
+    connection: &Connection,
+    volume: &VolumeId,
+    password: &Password,
+) -> Result<PathBuf, DriveFailure> {
     let path = object(&volume.0)?;
-    let filesystem = proxy(connection, &path, FILESYSTEM)?;
+    let encrypted = proxy(connection, &path, ENCRYPTED)?;
+    let open: OwnedObjectPath = encrypted.get_property(CLEARTEXT_DEVICE).map_err(failure)?;
+    let inside = if open.as_str() == objects::NO_OBJECT {
+        encrypted
+            .call(UNLOCK, &(password.0.as_str(), Options::new()))
+            .map_err(|error| match failure(error) {
+                DriveFailure::Failed(text)
+                    if WRONG_PASSWORD.iter().any(|said| text.contains(said)) =>
+                {
+                    DriveFailure::WrongPassword
+                }
+                other => other,
+            })?
+    } else {
+        open
+    };
+    mount_at(connection, &inside)
+}
+
+fn mount_at(connection: &Connection, path: &OwnedObjectPath) -> Result<PathBuf, DriveFailure> {
+    let filesystem = proxy(connection, path, FILESYSTEM)?;
     match filesystem.call::<_, _, String>(MOUNT, &(Options::new(),)) {
         Ok(point) => Ok(PathBuf::from(point)),
         Err(error) if is(&error, ALREADY_MOUNTED) => {
@@ -109,6 +145,11 @@ fn eject(connection: &Connection, drive: &DriveId) -> Result<(), DriveFailure> {
     let plan = objects::eject_plan(&objects, &path)?;
     for volume in &plan.mounted {
         unmount(connection, volume)?;
+    }
+    for volume in &plan.unlocked {
+        proxy(connection, volume, ENCRYPTED)?
+            .call::<_, _, ()>(LOCK, &(Options::new(),))
+            .map_err(failure)?;
     }
     let drive = proxy(connection, &path, DRIVE)?;
     if plan.eject {
