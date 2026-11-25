@@ -41,6 +41,10 @@ pub enum Command {
     /// The client no longer shows a quick look: the core lets go of what
     /// it holds for the last preview, such as an open PDF.
     Closed,
+    /// Open the video or song at `path` in the user's default app, which
+    /// starts at `at` when it is a player that can be told so. The answer
+    /// is the open feature's `Opened` or `NotOpened` event.
+    OpenAt { path: PathBuf, at: Duration },
 }
 
 /// Something the preview feature's core half tells one client.

@@ -29,7 +29,7 @@ use looks::{
     DEFAULT_FIT, QuickLook, QuickLooks, Shown, moved, render_image, render_moving, without_pixels,
 };
 use pages::{Layout, Pages, Scroll};
-use player::Media;
+use player::{Media, State};
 
 pub struct PreviewPart {
     host: Host,
@@ -361,10 +361,26 @@ impl PreviewPart {
         if !self.previewing() {
             return false;
         }
-        let Some(entry) = self.looks.open.as_ref().map(|open| open.entry) else {
+        let Some((listing, entry)) = self
+            .looks
+            .open
+            .as_ref()
+            .map(|open| (open.listing, open.entry))
+        else {
             return false;
         };
+        let at = self
+            .shown_media()
+            .filter(|media| media.state != State::Ended)
+            .map(|media| media.at)
+            .filter(|at| !at.is_zero());
+        let path = self.entry_path(listing, entry, cx);
         self.close(cx);
+        if let Some((at, path)) = at.zip(path)
+            && self.host.link.send(Command::OpenAt { path, at }).is_ok()
+        {
+            return true;
+        }
         self.host
             .entries
             .update(cx, |entries, cx| entries.open(entry, cx));

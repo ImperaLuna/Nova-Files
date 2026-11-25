@@ -514,7 +514,8 @@ fn quick_look_on_a_result_asks_for_the_file_where_it_is(cx: &mut TestAppContext)
             nova_files_preview_api::Command::Preview { path, .. } => Some(path),
             nova_files_preview_api::Command::Page { .. }
             | nova_files_preview_api::Command::Control { .. }
-            | nova_files_preview_api::Command::Closed => None,
+            | nova_files_preview_api::Command::Closed
+            | nova_files_preview_api::Command::OpenAt { .. } => None,
         })
         .collect();
     assert_eq!(looked, [PathBuf::from("/docs/report.pdf")]);

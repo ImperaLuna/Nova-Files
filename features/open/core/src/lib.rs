@@ -5,6 +5,7 @@ mod entry;
 mod exec;
 mod folders;
 mod mime;
+mod resume;
 mod terminal;
 #[cfg(test)]
 mod tree;
@@ -16,6 +17,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, OnceLock, mpsc};
 use std::thread;
+use std::time::Duration;
 
 use defaults::{App, Places};
 use exec::Fields;
@@ -56,9 +58,27 @@ pub fn launch_without(variable: &'static str) {
 
 pub fn open(
     events: &Arc<dyn EventSink>,
-    (types, archives): (Arc<OnceLock<MimeTypes>>, Arc<dyn TakeOut>),
+    opening: (Arc<OnceLock<MimeTypes>>, Arc<dyn TakeOut>),
     path: PathBuf,
     activation: Option<String>,
+) {
+    open_starting(events, opening, path, (activation, None));
+}
+
+pub fn open_at(
+    events: &Arc<dyn EventSink>,
+    opening: (Arc<OnceLock<MimeTypes>>, Arc<dyn TakeOut>),
+    path: PathBuf,
+    at: Duration,
+) {
+    open_starting(events, opening, path, (None, Some(at)));
+}
+
+fn open_starting(
+    events: &Arc<dyn EventSink>,
+    (types, archives): (Arc<OnceLock<MimeTypes>>, Arc<dyn TakeOut>),
+    path: PathBuf,
+    (activation, at): (Option<String>, Option<Duration>),
 ) {
     let thread_events = Arc::clone(events);
     let failed_path = path.clone();
@@ -67,9 +87,9 @@ pub fn open(
         .spawn(move || {
             let types = types.get_or_init(MimeTypes::from_env);
             let opened = match opened_copy(&path, archives.as_ref()) {
-                Some(Ok(copy)) => open_file(&copy, types, activation.as_deref()),
+                Some(Ok(copy)) => open_file(&copy, types, (activation.as_deref(), at)),
                 Some(Err(reason)) => Err(reason),
-                None => open_file(&path, types, activation.as_deref()),
+                None => open_file(&path, types, (activation.as_deref(), at)),
             };
             let event = match opened {
                 Ok(()) => Event::Opened { path },
@@ -95,13 +115,17 @@ fn opened_copy(path: &Path, archives: &dyn TakeOut) -> Option<Result<PathBuf, No
     archives.take_out(path)
 }
 
-fn open_file(file: &Path, types: &MimeTypes, activation: Option<&str>) -> Result<(), NotOpened> {
+fn open_file(
+    file: &Path,
+    types: &MimeTypes,
+    starting: (Option<&str>, Option<Duration>),
+) -> Result<(), NotOpened> {
     let ancestry = types_of(file, types);
     let ancestry: Vec<&str> = ancestry.iter().map(String::as_str).collect();
     if ancestry.is_empty() {
         return Err(NotOpened::NoApp);
     }
-    open_in_default_app(file, &ancestry, activation)
+    open_in_default_app(file, &ancestry, starting)
 }
 
 fn types_of(file: &Path, types: &MimeTypes) -> Vec<String> {
@@ -114,12 +138,12 @@ fn types_of(file: &Path, types: &MimeTypes) -> Vec<String> {
 pub fn open_in_default_app(
     file: &Path,
     types: &[&str],
-    activation: Option<&str>,
+    starting: (Option<&str>, Option<Duration>),
 ) -> Result<(), NotOpened> {
     if Path::new(FLATPAK_INFO).exists() {
         return Err(NotOpened::Sandboxed);
     }
-    open_from(file, types, activation, &environment_places())
+    open_from(file, types, starting, &environment_places())
 }
 
 fn environment_places() -> Places {
@@ -129,13 +153,17 @@ fn environment_places() -> Places {
 fn open_from(
     file: &Path,
     types: &[&str],
-    activation: Option<&str>,
+    (activation, at): (Option<&str>, Option<Duration>),
     places: &Places,
 ) -> Result<(), NotOpened> {
     let app = defaults::default_app(types, places).ok_or(NotOpened::NoApp)?;
     let line = commands(&app, &[file])
         .and_then(|mut lines| lines.pop())
         .ok_or(NotOpened::NoApp)?;
+    let line = match at {
+        Some(at) => resume::starting_at(&app.id, line, file, at),
+        None => line,
+    };
     launch(&line, app.entry.working_dir.as_deref(), activation).map_err(|_| NotOpened::Failed)
 }
 
@@ -371,9 +399,9 @@ mod tests {
     #[test]
     fn a_type_nothing_opens_is_left_to_the_portal() {
         let places = Places::default();
-        let opened = open_from(Path::new("/h/a"), &["image/png"], None, &places);
+        let opened = open_from(Path::new("/h/a"), &["image/png"], (None, None), &places);
         assert!(matches!(opened, Err(NotOpened::NoApp)), "{opened:?}");
-        let opened = open_from(Path::new("/h/a"), &[], None, &places);
+        let opened = open_from(Path::new("/h/a"), &[], (None, None), &places);
         assert!(matches!(opened, Err(NotOpened::NoApp)), "{opened:?}");
     }
 
