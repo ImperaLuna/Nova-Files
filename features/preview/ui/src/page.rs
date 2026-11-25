@@ -116,7 +116,10 @@ pub fn page_art(
         mono,
         follow,
         pictures: Rc::clone(&page.pictures.drawn),
-        room: ((width - PAGE_PAD_X * BOTH_SIDES).max(Pixels::ZERO), scale_factor),
+        room: (
+            (width - PAGE_PAD_X * BOTH_SIDES).max(Pixels::ZERO),
+            scale_factor,
+        ),
     };
     gpui::div()
         .debug_selector(|| "preview-markdown".to_owned())
