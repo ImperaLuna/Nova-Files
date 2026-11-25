@@ -53,6 +53,15 @@ async fn rows_in_a_repository_show_what_changed_and_dim_what_is_ignored(cx: &mut
     let mark = cx.debug_bounds("git-mark-kept.txt").unwrap();
     let name = cx.debug_bounds("name-0").unwrap();
     assert!(mark.right() < name.left());
+
+    fs::create_dir_all(repo.join("src")).unwrap();
+    fs::write(repo.join("src").join("main.rs"), "fn main() {}").unwrap();
+    view.update(cx, |view, _| view.open(&repo.join("src")));
+    wait_for_folder(&view, cx, &repo.join("src")).await;
+    cx.run_until_parked();
+    assert_eq!(cx.debug_bounds("name-0").unwrap().left(), name.left());
+    view.update(cx, |view, _| view.open(&repo));
+    wait_for_folder(&view, cx, &repo).await;
     assert!(cx.debug_bounds("git-mark-.gitignore").is_none());
     assert!(cx.debug_bounds(BRANCH_CHIP).is_some());
     assert!(cx.debug_bounds(CHIP_CHANGES).is_some());

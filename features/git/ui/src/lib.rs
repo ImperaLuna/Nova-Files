@@ -23,6 +23,7 @@ pub struct GitPart {
     host: Host,
     asked: Option<PathBuf>,
     marks: Option<Marks>,
+    in_repo: bool,
 }
 
 impl GitPart {
@@ -54,6 +55,7 @@ impl GitPart {
         if let Event::Marks { folder, marks } = event
             && self.asked.as_ref() == Some(&folder)
         {
+            self.in_repo = marks.is_some();
             self.marks = marks;
             cx.notify();
         }
@@ -83,7 +85,7 @@ fn row_mark(part: &GitPart, entry: &Entry, cx: &App) -> Option<AnyElement> {
 }
 
 fn marks_shown(part: &GitPart, scene: &Scene, _: &App) -> bool {
-    part.marks.is_some()
+    part.in_repo
         && part
             .asked
             .as_ref()
@@ -137,6 +139,7 @@ impl Part for GitPart {
             host: host.clone(),
             asked: None,
             marks: None,
+            in_repo: false,
         }
     }
 
