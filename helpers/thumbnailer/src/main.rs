@@ -2,6 +2,7 @@
 
 mod batch;
 mod data_dirs;
+mod diagram;
 mod document;
 mod mime;
 mod moving;
@@ -23,6 +24,13 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         };
         return preview::run(&request);
+    }
+    if args.next_if(|arg| arg == diagram::FLAG).is_some() {
+        let Some(request) = diagram::Request::from_args(args) else {
+            writeln!(io::stderr(), "{}", diagram::USAGE).ok();
+            return ExitCode::FAILURE;
+        };
+        return diagram::run(&request);
     }
     if args.next_if(|arg| arg == document::FLAG).is_some() {
         let Some(file) = document::file_from_args(args) else {

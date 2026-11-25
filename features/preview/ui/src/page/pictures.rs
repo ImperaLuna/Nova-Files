@@ -4,7 +4,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use gpui::RenderImage;
-use nova_files_preview_api::markdown::Block;
+use nova_files_preview_api::markdown::{Block, FigureKind};
 
 use crate::links::{Link, link};
 
@@ -16,14 +16,22 @@ pub type Drawn = Rc<HashMap<Arc<str>, Arc<RenderImage>>>;
 pub struct Pictures {
     pub wanted: Vec<(Arc<str>, PathBuf)>,
     pub drawn: Drawn,
+    pub figures: Vec<(FigureKind, Arc<str>)>,
+    pub figured: Drawn,
+}
+
+#[derive(Default)]
+struct Gathered {
+    targets: Vec<Arc<str>>,
+    figures: Vec<(FigureKind, Arc<str>)>,
 }
 
 impl Pictures {
     pub fn new(blocks: &[Block], folder: Option<&Path>) -> Self {
-        let mut targets = Vec::new();
-        gather(blocks, &mut targets);
+        let mut gathered = Gathered::default();
+        gather(blocks, &mut gathered);
         let mut wanted: Vec<(Arc<str>, PathBuf)> = Vec::new();
-        for target in targets {
+        for target in gathered.targets {
             if wanted.len() == DRAWN_PICTURES {
                 break;
             }
@@ -34,10 +42,38 @@ impl Pictures {
                 wanted.push((target, path));
             }
         }
+        let mut figures: Vec<(FigureKind, Arc<str>)> = Vec::new();
+        for (kind, source) in gathered.figures {
+            if figures.len() == DRAWN_PICTURES {
+                break;
+            }
+            if !figures.iter().any(|(_, seen)| *seen == source) {
+                figures.push((kind, source));
+            }
+        }
         Self {
             wanted,
             drawn: Rc::default(),
+            figures,
+            figured: Rc::default(),
         }
+    }
+
+    pub fn figuring(&self) -> impl Iterator<Item = &(FigureKind, Arc<str>)> {
+        self.figures
+            .iter()
+            .filter(|(_, source)| !self.figured.contains_key(source))
+    }
+
+    pub fn figured(
+        &mut self,
+        source: &Arc<str>,
+        image: Arc<RenderImage>,
+    ) -> Option<Arc<RenderImage>> {
+        if !self.figures.iter().any(|(_, wanted)| wanted == source) {
+            return Some(image);
+        }
+        Rc::make_mut(&mut self.figured).insert(Arc::clone(source), image)
     }
 
     pub fn asking(&self) -> impl Iterator<Item = &PathBuf> {
@@ -67,7 +103,9 @@ impl Pictures {
 
     pub fn images(self) -> impl Iterator<Item = Arc<RenderImage>> {
         let mut seen: Vec<Arc<RenderImage>> = Vec::new();
-        for image in Rc::unwrap_or_clone(self.drawn).into_values() {
+        let drawn = Rc::unwrap_or_clone(self.drawn).into_values();
+        let figured = Rc::unwrap_or_clone(self.figured).into_values();
+        for image in drawn.chain(figured) {
             if !seen.iter().any(|kept| Arc::ptr_eq(kept, &image)) {
                 seen.push(image);
             }
@@ -76,14 +114,15 @@ impl Pictures {
     }
 }
 
-fn gather(blocks: &[Block], targets: &mut Vec<Arc<str>>) {
+fn gather(blocks: &[Block], gathered: &mut Gathered) {
     for block in blocks {
         match block {
-            Block::Picture { target, .. } => targets.push(Arc::clone(target)),
-            Block::Quote(inner) | Block::Note { blocks: inner, .. } => gather(inner, targets),
+            Block::Picture { target, .. } => gathered.targets.push(Arc::clone(target)),
+            Block::Figure { kind, source } => gathered.figures.push((*kind, Arc::clone(source))),
+            Block::Quote(inner) | Block::Note { blocks: inner, .. } => gather(inner, gathered),
             Block::List { items, .. } => {
                 for item in items.iter() {
-                    gather(&item.blocks, targets);
+                    gather(&item.blocks, gathered);
                 }
             }
             _ => {}

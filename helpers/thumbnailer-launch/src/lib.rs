@@ -18,6 +18,7 @@ const PER_FILE: Duration = Duration::from_secs(15);
 const PASSED_VARS: [&str; 4] = ["PATH", "HOME", "XDG_DATA_HOME", "XDG_DATA_DIRS"];
 const READER_THREAD: &str = "nova-files-thumbnail-reader";
 const PREVIEW_FLAG: &str = "--preview";
+const DIAGRAM_FLAG: &str = "--diagram";
 const BYTES_PER_PIXEL: u64 = 4;
 const MAX_SIZE_LINE: usize = 32;
 const MAX_FRAMES: usize = 2000;
@@ -133,6 +134,34 @@ pub fn picture(
         .arg(file)
         .arg(fit.width.to_string())
         .arg(fit.height.to_string());
+    pictures_from(command, fit, running, wanted)
+}
+
+pub fn diagram(
+    helper: &Path,
+    (source, zoom_percent): (&str, u16),
+    fit: Fit,
+    running: &Running,
+    wanted: impl Fn() -> bool,
+) -> Option<Picture> {
+    let fit = fit.clamped();
+    let mut command = command(helper);
+    command
+        .arg(DIAGRAM_FLAG)
+        .arg(fit.width.to_string())
+        .arg(fit.height.to_string())
+        .arg(zoom_percent.to_string())
+        .arg(source);
+    let mut frames = pictures_from(command, fit, running, wanted)?;
+    (frames.len() == 1).then(|| frames.remove(0).0)
+}
+
+fn pictures_from(
+    mut command: Command,
+    fit: Fit,
+    running: &Running,
+    wanted: impl Fn() -> bool,
+) -> Option<Vec<(Picture, Duration)>> {
     let mut child = command.spawn().ok()?;
     running.start(
         i32::try_from(child.id()).ok().and_then(Pid::from_raw),

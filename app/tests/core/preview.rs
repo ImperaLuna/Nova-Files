@@ -53,7 +53,10 @@ fn preview(client: &Client, id: u64, path: PathBuf) -> Result<Arc<Preview>, Unre
             assert_eq!(answered, PreviewId(id));
             Err(reason)
         }
-        other @ (Event::Paged { .. } | Event::Played { .. } | Event::Drawn { .. }) => {
+        other @ (Event::Paged { .. }
+        | Event::Played { .. }
+        | Event::Drawn { .. }
+        | Event::Figured { .. }) => {
             panic!("expected a preview, got {other:?}")
         }
     }

@@ -245,6 +245,24 @@ fn preview(setup: &Setup, _: ClientId, client: &Client, command: preview_api::Co
             };
             nova_files_preview_core::draw(client.events(), current, helper, asked);
         }
+        preview_api::Command::Figure {
+            id,
+            kind,
+            source,
+            zoom_percent,
+            fit,
+        } => {
+            let current = client.current_preview();
+            let helper = setup.thumbnails.as_ref().map(|setup| setup.helper.clone());
+            let asked = nova_files_preview_core::FigureAsked {
+                id,
+                kind,
+                source,
+                zoom_percent,
+                fit,
+            };
+            nova_files_preview_core::figure(client.events(), current, helper, asked);
+        }
     }
 }
 

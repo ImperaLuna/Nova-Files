@@ -173,7 +173,8 @@ fn stepping_through_pictures_answers_the_last() {
             other @ (Event::Unreadable { .. }
             | Event::Paged { .. }
             | Event::Played { .. }
-            | Event::Drawn { .. }) => {
+            | Event::Drawn { .. }
+            | Event::Figured { .. }) => {
                 panic!("expected a preview, got {other:?}")
             }
         }

@@ -8,10 +8,20 @@ use crate::render::scaled_into;
 
 pub fn draw(path: &Path, width: u32, height: u32) -> Option<RgbaImage> {
     let data = fs::read(path).ok()?;
+    draw_data(&data, (width, height), None)
+}
+
+pub fn draw_data(data: &[u8], (width, height): (u32, u32), zoom: Option<f32>) -> Option<RgbaImage> {
     let mut options = usvg::Options::default();
     options.fontdb_mut().load_system_fonts();
-    let tree = usvg::Tree::from_data(&data, &options).ok()?;
+    let tree = usvg::Tree::from_data(data, &options).ok()?;
     let size = tree.size().to_int_size();
+    let (width, height) = zoom.map_or((width, height), |zoom| {
+        (
+            width.min(zoomed(size.width(), zoom)),
+            height.min(zoomed(size.height(), zoom)),
+        )
+    });
     let (drawn_width, drawn_height) = scaled_into(size.width(), size.height(), width, height);
     #[expect(
         clippy::cast_precision_loss,
@@ -33,6 +43,17 @@ pub fn draw(path: &Path, width: u32, height: u32) -> Option<RgbaImage> {
         })
         .collect();
     RgbaImage::from_raw(drawn_width, drawn_height, pixels)
+}
+
+fn zoomed(side: u32, zoom: f32) -> u32 {
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        clippy::cast_precision_loss,
+        reason = "a drawing's side of a few thousand pixels, zoomed by a small positive factor"
+    )]
+    let zoomed = (side as f32 * zoom).ceil().max(1.0) as u32;
+    zoomed
 }
 
 #[cfg(test)]

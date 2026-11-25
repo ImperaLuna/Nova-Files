@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
 
 use nova_files_api::{EventSink, Fit, Picture};
+use nova_files_preview_api::markdown::FigureKind;
 use nova_files_preview_api::{Event, PreviewId};
 use nova_files_thumbnailer_launch::{self as launch, Running};
 
@@ -51,6 +52,56 @@ pub fn draw(
     if spawned.is_err() {
         let drawn = None;
         events.deliver(Event::Drawn { id, picture, drawn }).ok();
+    }
+}
+
+pub struct FigureAsked {
+    pub id: PreviewId,
+    pub kind: FigureKind,
+    pub source: Arc<str>,
+    pub zoom_percent: u16,
+    pub fit: Fit,
+}
+
+pub fn figure(
+    events: &Arc<dyn EventSink>,
+    current: &Arc<Current>,
+    helper: Option<PathBuf>,
+    asked: FigureAsked,
+) {
+    let sink = Arc::clone(events);
+    let current = Arc::clone(current);
+    let (id, source) = (asked.id, Arc::clone(&asked.source));
+    let spawned = thread::Builder::new()
+        .name(THREAD_NAME.to_owned())
+        .spawn(move || {
+            let drawn = helper
+                .as_deref()
+                .and_then(|helper| figured(&current, helper, &asked));
+            if current.is(asked.id) {
+                let (id, source) = (asked.id, asked.source);
+                sink.deliver(Event::Figured { id, source, drawn }).ok();
+            }
+        });
+    if spawned.is_err() {
+        let drawn = None;
+        events.deliver(Event::Figured { id, source, drawn }).ok();
+    }
+}
+
+fn figured(current: &Current, helper: &Path, asked: &FigureAsked) -> Option<Picture> {
+    let drawing = &current.drawing;
+    let _turn = drawing.turn.lock().unwrap_or_else(PoisonError::into_inner);
+    let wanted = || current.is(asked.id);
+    if !wanted() {
+        return None;
+    }
+    match asked.kind {
+        FigureKind::Diagram => {
+            let source = (&*asked.source, asked.zoom_percent);
+            launch::diagram(helper, source, asked.fit, &drawing.running, wanted)
+        }
+        FigureKind::Formula => None,
     }
 }
 

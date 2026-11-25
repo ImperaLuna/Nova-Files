@@ -57,6 +57,17 @@ pub enum Command {
         picture: PathBuf,
         fit: Fit,
     },
+    /// Draw a Markdown figure from its `source`, at `zoom_percent` of its
+    /// own size and no bigger than `fit`. The answer is [`Event::Figured`]
+    /// with the same `id` and `source`, unless a newer preview replaced `id`
+    /// first.
+    Figure {
+        id: PreviewId,
+        kind: markdown::FigureKind,
+        source: Arc<str>,
+        zoom_percent: u16,
+        fit: Fit,
+    },
 }
 
 /// Something the preview feature's core half tells one client.
@@ -87,6 +98,13 @@ pub enum Event {
     Drawn {
         id: PreviewId,
         picture: PathBuf,
+        drawn: Option<Picture>,
+    },
+    /// The figure [`Command::Figure`] asked for; `None` when its source
+    /// couldn't be drawn.
+    Figured {
+        id: PreviewId,
+        source: Arc<str>,
         drawn: Option<Picture>,
     },
 }

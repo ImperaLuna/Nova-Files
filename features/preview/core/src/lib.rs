@@ -96,7 +96,7 @@ impl Current {
     }
 }
 
-pub use drawing::{Asked as DrawAsked, draw};
+pub use drawing::{Asked as DrawAsked, FigureAsked, draw, figure};
 pub use media::{control, player_beside};
 
 pub struct Request {
