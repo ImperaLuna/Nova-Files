@@ -2,6 +2,7 @@
 
 mod cards;
 mod shown;
+mod unlock;
 
 use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
@@ -17,17 +18,20 @@ use nova_files_shell::{
 };
 
 pub use shown::{NEARLY_FULL, ShownDrive, free, here, shown};
+pub use unlock::Said;
 
 const ROW_PREFIX: &str = "drive-";
 const OPEN_LABEL: &str = "Open";
 const NEW_TAB_LABEL: &str = "Open in new tab";
 const EJECT_LABEL: &str = "Eject";
+const UNLOCK_LABEL: &str = "Unlock";
 
 pub struct DrivesPart {
     host: Host,
     this: WeakEntity<Self>,
     known: KnownDrives,
     opening: Option<VolumeId>,
+    asked: Option<unlock::Asked>,
     asking: bool,
     ask_again: bool,
     _left: Subscription,
@@ -45,6 +49,7 @@ impl DrivesPart {
     pub fn open_drive(&mut self, drive: ShownDrive, cx: &mut Context<Self>) {
         match (drive.folder, drive.volume) {
             (Some(folder), _) => self.go(Location::Folder(folder), cx),
+            (None, Some(volume)) if drive.locked => self.ask_password(volume, drive.name, cx),
             (None, Some(volume)) if self.opening.as_ref() == Some(&volume) => {}
             (None, Some(volume)) => {
                 self.opening = Some(volume.clone());
@@ -79,6 +84,7 @@ impl DrivesPart {
         match event {
             Event::Drives(list) => {
                 self.leave_gone_drive(&list, cx);
+                self.stop_asking_unless_locked(&list, cx);
                 self.known.list = list;
                 let shown: Vec<PathBuf> = self
                     .shown()
@@ -113,9 +119,14 @@ impl DrivesPart {
         cx: &mut Context<Self>,
     ) {
         let opening = match action {
-            DriveAction::Mount(volume) => self.opening.as_ref() == Some(volume),
+            DriveAction::Mount(volume) | DriveAction::Unlock(volume, _) => {
+                self.opening.as_ref() == Some(volume)
+            }
             DriveAction::Unmount(_) | DriveAction::Eject(_) => false,
         };
+        if let DriveAction::Unlock(volume, _) = action {
+            self.unlock_done(volume, result.as_ref().err(), cx);
+        }
         if opening {
             self.opening = None;
         }
@@ -203,17 +214,22 @@ fn rows(part: &DrivesPart, scene: &Scene, _: &App) -> Vec<SidebarRow> {
                 (Some(text), if full { Look::Danger } else { Look::Plain })
             });
             let id = format!("{ROW_PREFIX}{index}");
+            let (icon, open_icon, open_label) = if drive.locked {
+                (Icon::Lock, Icon::Lock, UNLOCK_LABEL)
+            } else {
+                (Icon::Drive, Icon::Open, OPEN_LABEL)
+            };
             let row = match drive.folder.clone() {
                 Some(folder) => {
                     SidebarRow::new(id, Icon::Drive, drive.name, Location::Folder(folder))
                 }
                 None => SidebarRow::acting(
                     id,
-                    Icon::Drive,
+                    icon,
                     drive.name.clone(),
                     RowItem::new(
-                        Icon::Open,
-                        OPEN_LABEL,
+                        open_icon,
+                        open_label,
                         part.run_on(drive.clone(), DrivesPart::open_drive),
                     ),
                 )
@@ -242,11 +258,16 @@ fn row_menu(part: &DrivesPart, row: &str, _: &App) -> Vec<Vec<RowItem>> {
                 .ok();
         })
     });
+    let (open_icon, open_label) = if drive.locked {
+        (Icon::Lock, UNLOCK_LABEL)
+    } else {
+        (Icon::Open, OPEN_LABEL)
+    };
     vec![
         vec![
             RowItem::new(
-                Icon::Open,
-                OPEN_LABEL,
+                open_icon,
+                open_label,
                 part.run_on(drive.clone(), DrivesPart::open_drive),
             ),
             RowItem::new(
@@ -272,6 +293,7 @@ impl Part for DrivesPart {
             this: cx.entity().downgrade(),
             known: KnownDrives::default(),
             opening: None,
+            asked: None,
             asking: false,
             ask_again: false,
             _left: left,
@@ -284,6 +306,7 @@ impl Part for DrivesPart {
         slots.listed(Self::listed);
         slots.sidebar(SidebarAt::Drives, rows);
         slots.row_menu(row_menu);
+        slots.island(unlock::asking, unlock::island);
         slots.start_card_at(CardRank::DRIVES, drive_cards);
     }
 }

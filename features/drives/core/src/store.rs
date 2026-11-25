@@ -159,7 +159,9 @@ mod tests {
         fn act(&self, action: &DriveAction) -> Result<Option<PathBuf>, DriveFailure> {
             self.0.acted.lock().unwrap().push(action.clone());
             match action {
-                DriveAction::Mount(_) => Ok(Some(PathBuf::from("/run/media/me/Photos"))),
+                DriveAction::Mount(_) | DriveAction::Unlock(..) => {
+                    Ok(Some(PathBuf::from("/run/media/me/Photos")))
+                }
                 DriveAction::Unmount(_) => Err(DriveFailure::Busy),
                 DriveAction::Eject(_) => Ok(None),
             }
@@ -188,6 +190,7 @@ mod tests {
                 mount_point: Some(PathBuf::from("/run/media/me/Photos")),
                 device: "/dev/sdb1".into(),
                 read_only: false,
+                locked: false,
             }],
         }
     }
