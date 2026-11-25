@@ -607,7 +607,8 @@ impl PreviewPart {
             .and_then(|shown| shown.page.take());
         let page = match preview.as_deref().map(|preview| &preview.content) {
             Some(PreviewContent::Markdown { blocks, .. }) => {
-                Some(Page::new(Arc::clone(blocks)).carrying(carried_page))
+                let mono = code::mono_family(cx);
+                Some(Page::new(Arc::clone(blocks), &mono).carrying(carried_page))
             }
             _ => None,
         };

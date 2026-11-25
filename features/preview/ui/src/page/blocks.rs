@@ -1,3 +1,4 @@
+use std::ops::Range;
 use std::sync::Arc;
 
 use gpui::{
@@ -36,6 +37,7 @@ const CELL_PAD_X: Pixels = px(10.0);
 const CELL_PAD_Y: Pixels = px(6.0);
 const NOTE_SIZE: Pixels = px(12.5);
 const NOTE_LABEL_WIDTH: Pixels = px(26.0);
+const LINE_END: char = '\n';
 
 pub struct Paint {
     pub colors: Colors,
@@ -51,16 +53,20 @@ pub struct Place {
 pub fn top_block(block: &Block, place: Place, paint: &Paint) -> AnyElement {
     div()
         .when(place.first, |block| block.pt(preview::TEXT_PAD_Y))
-        .pb(if place.last {
-            preview::TEXT_PAD_Y
-        } else {
-            BLOCK_GAP
-        })
+        .pb(gap_after(place))
         .text_size(BODY_SIZE)
         .line_height(BODY_LINE)
         .text_color(paint.colors.text_soft)
         .child(drawn(block, paint))
         .into_any_element()
+}
+
+const fn gap_after(place: Place) -> Pixels {
+    if place.last {
+        preview::TEXT_PAD_Y
+    } else {
+        BLOCK_GAP
+    }
 }
 
 fn drawn(block: &Block, paint: &Paint) -> AnyElement {
@@ -165,25 +171,53 @@ fn tick(checked: bool, colors: &Colors) -> AnyElement {
 }
 
 fn code(text: &str, runs: &[Run], paint: &Paint) -> AnyElement {
-    let colors = &paint.colors;
-    let coded = Coded::new(text.trim_end_matches('\n'), runs, paint.mono.clone());
-    div()
+    let coded = Coded::new(text.trim_end_matches(LINE_END), runs, paint.mono.clone());
+    code_box(paint)
         .p(CODE_PAD)
         .rounded(radius::ROW)
-        .bg(colors.raised)
+        .children(code_lines(&coded, 0..coded.lines.len(), paint))
+        .into_any_element()
+}
+
+pub fn code_rows(coded: &Coded, lines: Range<usize>, place: Place, paint: &Paint) -> AnyElement {
+    let first_lines = lines.start == 0;
+    let last_lines = lines.end == coded.lines.len();
+    let code = code_box(paint)
+        .px(CODE_PAD)
+        .when(first_lines, |code| code.pt(CODE_PAD).rounded_t(radius::ROW))
+        .when(last_lines, |code| code.pb(CODE_PAD).rounded_b(radius::ROW))
+        .children(code_lines(coded, lines, paint));
+    div()
+        .when(place.first && first_lines, |row| {
+            row.pt(preview::TEXT_PAD_Y)
+        })
+        .when(last_lines, |row| row.pb(gap_after(place)))
+        .child(code)
+        .into_any_element()
+}
+
+fn code_box(paint: &Paint) -> Div {
+    div()
+        .bg(paint.colors.raised)
         .font_family(paint.mono.clone())
         .text_size(CODE_SIZE)
         .line_height(CODE_LINE)
-        .text_color(colors.code.plain)
+        .text_color(paint.colors.code.plain)
         .whitespace_nowrap()
         .overflow_hidden()
-        .children(
-            coded
-                .lines
-                .iter()
-                .map(|line| div().truncate().child(line.styled(&colors.code))),
-        )
-        .into_any_element()
+}
+
+fn code_lines<'a>(
+    coded: &'a Coded,
+    lines: Range<usize>,
+    paint: &'a Paint,
+) -> impl Iterator<Item = Div> + 'a {
+    coded
+        .lines
+        .get(lines)
+        .unwrap_or_default()
+        .iter()
+        .map(|line| div().truncate().child(line.styled(&paint.colors.code)))
 }
 
 fn table(aligns: &[Align], head: &[Inline], rows: &[Arc<[Inline]>], colors: &Colors) -> AnyElement {

@@ -1,4 +1,5 @@
 use std::ops::Range;
+use std::sync::Arc;
 
 use gpui::{
     FontStyle, HighlightStyle, SharedString, StrikethroughStyle, StyledText, UnderlineStyle,
@@ -10,7 +11,7 @@ pub fn styled(inline: &Inline, colors: &Colors) -> StyledText {
     let highlights: Vec<(Range<usize>, HighlightStyle)> = ranges(&inline.spans)
         .filter_map(|(range, span)| Some((range, highlight(span, colors)?)))
         .collect();
-    StyledText::new(SharedString::from(inline.text.to_string())).with_highlights(highlights)
+    StyledText::new(SharedString::from(Arc::clone(&inline.text))).with_highlights(highlights)
 }
 
 fn ranges(spans: &[Span]) -> impl Iterator<Item = (Range<usize>, &Span)> {

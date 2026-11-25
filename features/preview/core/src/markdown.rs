@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::mem;
 use std::sync::Arc;
 
@@ -122,7 +123,7 @@ struct Page {
     tables: Vec<Table>,
     metadata: bool,
     colouring: Colouring,
-    notes: Vec<String>,
+    notes: HashMap<String, usize>,
 }
 
 #[derive(Default)]
@@ -379,15 +380,8 @@ impl Page {
     }
 
     fn note_number(&mut self, label: &str) -> usize {
-        let index = self
-            .notes
-            .iter()
-            .position(|known| known == label)
-            .unwrap_or_else(|| {
-                self.notes.push(label.to_owned());
-                self.notes.len() - 1
-            });
-        index + 1
+        let next = self.notes.len() + 1;
+        *self.notes.entry(label.to_owned()).or_insert(next)
     }
 
     fn check(&mut self, checked: bool) {
