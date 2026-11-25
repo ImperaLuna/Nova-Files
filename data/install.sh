@@ -27,6 +27,7 @@ set -euo pipefail
 readonly PROGRAM=nova-files
 readonly HELPER=nova-files-thumbnailer
 readonly ARCHIVER=nova-files-archiver
+readonly PLAYER=nova-files-player
 # What `full` uses from the distro, as `program:package`.
 readonly FULL_EXTRAS="ffmpegthumbnailer:ffmpegthumbnailer udisksctl:udisks2"
 # The prefix is written into Exec lines, which split on spaces and give
@@ -102,6 +103,7 @@ layout() {
 program all $PROGRAM bin/$PROGRAM
 program all $HELPER bin/$HELPER
 program all $ARCHIVER bin/$ARCHIVER
+program all $PLAYER bin/$PLAYER
 template all dbus-service.in share/dbus-1/services/$app_id.service
 template app desktop-entry.in share/applications/$app_id.desktop
 copy app app-icon.svg share/icons/hicolor/scalable/apps/$app_id.svg
