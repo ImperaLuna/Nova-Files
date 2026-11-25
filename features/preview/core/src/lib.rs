@@ -1,8 +1,10 @@
 #![forbid(unsafe_code)]
 
 mod code;
+mod markdown;
 mod media;
 
+use std::ffi::OsStr;
 use std::fs::{self, File, Metadata};
 use std::io::{self, Read as _};
 use std::os::unix::fs::OpenOptionsExt as _;
@@ -14,6 +16,7 @@ use std::thread;
 use nova_files_api::{EventSink, Fit, Unreadable};
 use nova_files_disk::ports::Mimes;
 use nova_files_entries_core::list::{self, Stopped};
+use nova_files_preview_api::markdown::PREVIEW_MARKDOWN_BYTES;
 use nova_files_preview_api::{
     Event, Frame, PREVIEW_ENTRIES, PREVIEW_TEXT_BYTES, PageSize, Preview, PreviewContent, PreviewId,
 };
@@ -34,6 +37,7 @@ const PICTURE_SIGNATURES: [&[(usize, &[u8])]; 5] = [
 const DRAWING_EXTENSIONS: [&str; 2] = ["svg", "svgz"];
 const PDF_SIGNATURE: &[u8] = b"%PDF-";
 const PDF_SIGNATURE_WITHIN: usize = 1024;
+const MARKDOWN_TYPE: &str = "text/markdown";
 
 #[derive(Debug, Default)]
 pub struct Current {
@@ -193,6 +197,15 @@ fn event(request: &Request) -> Option<Event> {
     };
     let named = (!metadata.is_dir()).then(|| target(path));
     let content = match (content, named.as_deref().and_then(Path::file_name)) {
+        (PreviewContent::Text { text, cut }, Some(name)) if is_markdown(request, name) => {
+            let (blocks, runs) = markdown::read(&text, cancelled)?;
+            PreviewContent::Markdown {
+                text,
+                cut,
+                runs: runs.into(),
+                blocks: blocks.into(),
+            }
+        }
         (PreviewContent::Text { text, cut }, Some(name)) => {
             match code::runs(name, &text, cancelled) {
                 Some(runs) => PreviewContent::Code {
@@ -236,7 +249,16 @@ fn file(request: &Request, metadata: &Metadata) -> io::Result<Option<PreviewCont
     if let Some(video) = media {
         return Ok(Some(PreviewContent::Media { video }));
     }
-    Ok(match (start(path, metadata)?, &request.helper) {
+    let named = target(path);
+    let markdown = named
+        .file_name()
+        .is_some_and(|name| is_markdown(request, name));
+    let limit = if markdown {
+        PREVIEW_MARKDOWN_BYTES
+    } else {
+        PREVIEW_TEXT_BYTES
+    };
+    Ok(match (start(path, metadata, limit)?, &request.helper) {
         (Some(start), Some(helper)) if is_picture(&start) || is_drawing(path) => {
             picture(request, helper)
         }
@@ -325,7 +347,14 @@ fn folder(path: &Path, cancelled: impl Fn() -> bool) -> Result<PreviewContent, S
     Ok(PreviewContent::Folder { first, count })
 }
 
-fn start(path: &Path, metadata: &Metadata) -> io::Result<Option<Vec<u8>>> {
+fn is_markdown(request: &Request, name: &OsStr) -> bool {
+    let types = &request.types;
+    types
+        .of(name)
+        .is_some_and(|mime| types.is_a(mime, MARKDOWN_TYPE))
+}
+
+fn start(path: &Path, metadata: &Metadata, limit: usize) -> io::Result<Option<Vec<u8>>> {
     if !metadata.is_file() {
         return Ok(None);
     }
@@ -333,8 +362,8 @@ fn start(path: &Path, metadata: &Metadata) -> io::Result<Option<Vec<u8>>> {
         .read(true)
         .custom_flags(OFlags::NONBLOCK.bits().cast_signed())
         .open(path)?;
-    let mut start = Vec::with_capacity(PREVIEW_TEXT_BYTES);
-    let limit = u64::try_from(PREVIEW_TEXT_BYTES).unwrap_or(u64::MAX);
+    let mut start = Vec::with_capacity(limit);
+    let limit = u64::try_from(limit).unwrap_or(u64::MAX);
     opened.take(limit).read_to_end(&mut start)?;
     Ok(Some(start))
 }
@@ -430,11 +459,12 @@ mod tests {
     struct PlainText;
 
     impl nova_files_api::FileTypes for PlainText {
-        fn of(&self, name: &std::ffi::OsStr) -> Option<&str> {
-            Path::new(name)
-                .extension()
-                .is_some_and(|extension| extension == "txt")
-                .then_some("text/plain")
+        fn of(&self, name: &OsStr) -> Option<&str> {
+            match Path::new(name).extension()?.to_str()? {
+                "txt" => Some("text/plain"),
+                "md" => Some(MARKDOWN_TYPE),
+                _ => None,
+            }
         }
 
         fn is_a(&self, mime: &str, wanted: &str) -> bool {
@@ -496,6 +526,29 @@ mod tests {
             PreviewContent::Text { cut: false, .. }
         ));
         assert_eq!(folder.kind_name, None);
+    }
+
+    #[test]
+    fn a_markdown_file_is_read_into_blocks_past_the_text_limit() {
+        let folder = TestFolder::new("preview-markdown");
+        let file = folder.join("notes.md");
+        let body = "word ".repeat(PREVIEW_TEXT_BYTES / 4);
+        fs::write(&file, format!("# Notes\n\n{body}\n")).unwrap();
+        let PreviewContent::Markdown {
+            text, cut, blocks, ..
+        } = &previewed(&file).content
+        else {
+            panic!("expected Markdown");
+        };
+        assert!(!cut);
+        assert!(text.len() > PREVIEW_TEXT_BYTES);
+        assert!(matches!(
+            &**blocks,
+            [
+                nova_files_preview_api::markdown::Block::Heading { level: 1, .. },
+                nova_files_preview_api::markdown::Block::Paragraph(_)
+            ]
+        ));
     }
 
     #[test]

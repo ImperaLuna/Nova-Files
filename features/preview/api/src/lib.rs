@@ -7,6 +7,8 @@
 
 #![forbid(unsafe_code)]
 
+pub mod markdown;
+
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -120,6 +122,16 @@ pub enum PreviewContent {
         text: Arc<str>,
         cut: bool,
         runs: Arc<[Run]>,
+    },
+    /// A Markdown file read into `blocks`. `text` is its start, at most
+    /// [`markdown::PREVIEW_MARKDOWN_BYTES`], `cut` when the file goes on
+    /// past it, and `runs` colour `text` as source, like
+    /// [`PreviewContent::Code`]'s.
+    Markdown {
+        text: Arc<str>,
+        cut: bool,
+        runs: Arc<[Run]>,
+        blocks: Arc<[markdown::Block]>,
     },
     /// A PDF: each page's size in points, in order. Its pages come one at a
     /// time through [`Command::Page`].
