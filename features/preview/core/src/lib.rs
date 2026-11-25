@@ -38,6 +38,7 @@ const DRAWING_EXTENSIONS: [&str; 2] = ["svg", "svgz"];
 const PDF_SIGNATURE: &[u8] = b"%PDF-";
 const PDF_SIGNATURE_WITHIN: usize = 1024;
 const MARKDOWN_TYPE: &str = "text/markdown";
+const MARKDOWN_ENDINGS: [&str; 2] = ["md", "markdown"];
 
 #[derive(Debug, Default)]
 pub struct Current {
@@ -349,9 +350,19 @@ fn folder(path: &Path, cancelled: impl Fn() -> bool) -> Result<PreviewContent, S
 
 fn is_markdown(request: &Request, name: &OsStr) -> bool {
     let types = &request.types;
-    types
-        .of(name)
-        .is_some_and(|mime| types.is_a(mime, MARKDOWN_TYPE))
+    types.of(name).map_or_else(
+        || {
+            Path::new(name)
+                .extension()
+                .and_then(OsStr::to_str)
+                .is_some_and(|ending| {
+                    MARKDOWN_ENDINGS
+                        .iter()
+                        .any(|markdown| ending.eq_ignore_ascii_case(markdown))
+                })
+        },
+        |mime| types.is_a(mime, MARKDOWN_TYPE),
+    )
 }
 
 fn start(path: &Path, metadata: &Metadata, limit: usize) -> io::Result<Option<Vec<u8>>> {

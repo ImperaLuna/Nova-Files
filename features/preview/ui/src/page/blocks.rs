@@ -11,7 +11,8 @@ use nova_files_shell::assets::Icon;
 use nova_files_shell::theme::{Colors, preview, radius, size, text};
 use nova_files_shell::widgets::icon;
 
-use super::inline::styled;
+use super::Follow;
+use super::inline::words;
 use crate::code::Coded;
 
 const BLOCK_GAP: Pixels = px(12.0);
@@ -42,6 +43,7 @@ const LINE_END: char = '\n';
 pub struct Paint {
     pub colors: Colors,
     pub mono: SharedString,
+    pub follow: Follow,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -72,8 +74,8 @@ const fn gap_after(place: Place) -> Pixels {
 fn drawn(block: &Block, paint: &Paint) -> AnyElement {
     let colors = &paint.colors;
     match block {
-        Block::Heading { level, text } => heading(*level, text, colors),
-        Block::Paragraph(text) => div().child(styled(text, colors)).into_any_element(),
+        Block::Heading { level, text } => heading(*level, text, paint),
+        Block::Paragraph(text) => div().child(words(text, paint)).into_any_element(),
         Block::Quote(blocks) => stack(blocks, paint)
             .border_l(QUOTE_BAR)
             .border_color(colors.line)
@@ -83,7 +85,7 @@ fn drawn(block: &Block, paint: &Paint) -> AnyElement {
         Block::List { first, items } => list(*first, items, paint),
         Block::Code { text, runs } => code(text, runs, paint),
         Block::Figure { source, .. } => code(source, &[], paint),
-        Block::Table { aligns, head, rows } => table(aligns, head, rows, colors),
+        Block::Table { aligns, head, rows } => table(aligns, head, rows, paint),
         Block::Rule => div().h(size::LINE).bg(colors.line).into_any_element(),
         Block::Picture { alt, .. } => div()
             .text_color(colors.text_dim)
@@ -101,7 +103,8 @@ fn stack(blocks: &[Block], paint: &Paint) -> Div {
         .children(blocks.iter().map(|block| drawn(block, paint)))
 }
 
-fn heading(level: u8, words: &Inline, colors: &Colors) -> AnyElement {
+fn heading(level: u8, text: &Inline, paint: &Paint) -> AnyElement {
+    let colors = &paint.colors;
     let index = usize::from(level.saturating_sub(1)).min(HEADING_SIZES.len() - 1);
     let side = HEADING_SIZES[index];
     let heading = div()
@@ -109,7 +112,7 @@ fn heading(level: u8, words: &Inline, colors: &Colors) -> AnyElement {
         .line_height(side * HEADING_LINE_SHARE)
         .font_weight(text::STRONG_WEIGHT)
         .text_color(colors.text)
-        .child(styled(words, colors));
+        .child(words(text, paint));
     if level <= RULED_HEADINGS {
         heading
             .pb(HEADING_RULE_GAP)
@@ -220,7 +223,8 @@ fn code_lines<'a>(
         .map(|line| div().truncate().child(line.styled(&paint.colors.code)))
 }
 
-fn table(aligns: &[Align], head: &[Inline], rows: &[Arc<[Inline]>], colors: &Colors) -> AnyElement {
+fn table(aligns: &[Align], head: &[Inline], rows: &[Arc<[Inline]>], paint: &Paint) -> AnyElement {
+    let colors = &paint.colors;
     let row = |cells: &[Inline]| {
         div()
             .flex()
@@ -233,7 +237,7 @@ fn table(aligns: &[Align], head: &[Inline], rows: &[Arc<[Inline]>], colors: &Col
                     Align::Center => cell.text_center(),
                     Align::End => cell.text_right(),
                 };
-                cell.children(cells.get(column).map(|words| styled(words, colors)))
+                cell.children(cells.get(column).map(|text| words(text, paint)))
             }))
     };
     div()

@@ -2,6 +2,7 @@
 
 mod code;
 mod draw;
+mod links;
 mod looks;
 mod page;
 mod pages;
@@ -88,10 +89,9 @@ impl PreviewPart {
         Some(Staged {
             entry: open.entry,
             art: draw::stage_art(
-                open,
-                listing,
-                entry,
+                (open, listing, entry),
                 (room, scale_factor, !self.previewing()),
+                &Self::follow(cx),
                 &Colors::of(cx),
             ),
             about: about.into(),
