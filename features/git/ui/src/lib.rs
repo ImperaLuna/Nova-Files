@@ -2,18 +2,22 @@
 
 use std::path::PathBuf;
 
+use gpui::prelude::FluentBuilder as _;
 use gpui::{
     AnyElement, App, Context, InteractiveElement as _, IntoElement as _, ParentElement as _,
-    Styled as _, div,
+    Styled as _, Window, div,
 };
 use nova_files_api::{Entry, Listing};
 use nova_files_git_api::{Command, Event, Mark, Marks};
 use nova_files_shell::theme::{Colors, size, text};
-use nova_files_shell::{Host, Part, Slots};
+use nova_files_shell::widgets::detail;
+use nova_files_shell::{Host, Part, Scene, Slots};
 
 const CHANGED: &str = "M";
 const NEW: &str = "U";
 const MARK_PREFIX: &str = "git-mark-";
+pub const BRANCH_CHIP: &str = "git-branch";
+pub const CHIP_CHANGES: &str = "git-branch-changes";
 
 pub struct GitPart {
     host: Host,
@@ -78,6 +82,43 @@ fn row_mark(part: &GitPart, entry: &Entry, cx: &App) -> Option<AnyElement> {
     )
 }
 
+fn branch_chip(
+    part: &mut GitPart,
+    scene: &Scene,
+    _: &mut Window,
+    cx: &mut Context<GitPart>,
+) -> Option<AnyElement> {
+    if !scene.in_folder(part.asked.as_ref()?) {
+        return None;
+    }
+    let repo = &part.marks.as_ref()?.repo;
+    let colors = Colors::of(cx);
+    let chip = div()
+        .debug_selector(|| BRANCH_CHIP.to_owned())
+        .flex()
+        .flex_none()
+        .items_center()
+        .gap(size::MARK_GAP)
+        .h(size::CHIP_HEIGHT)
+        .px(size::CHIP_PAD)
+        .when(repo.changed, |chip| {
+            chip.child(
+                div()
+                    .debug_selector(|| CHIP_CHANGES.to_owned())
+                    .flex_none()
+                    .size(size::MARK_DOT)
+                    .rounded_full()
+                    .bg(colors.changed),
+            )
+        })
+        .child(detail(repo.head.name().to_owned(), &colors).text_color(colors.text_soft))
+        .children(
+            repo.counts()
+                .map(|counts| detail(counts, &colors).flex_none()),
+        );
+    Some(chip.into_any_element())
+}
+
 fn ignored(part: &GitPart, entry: &Entry, _: &App) -> bool {
     part.mark(entry) == Some(Mark::Ignored)
 }
@@ -97,5 +138,6 @@ impl Part for GitPart {
         slots.listed(Self::listed);
         slots.row_mark(row_mark);
         slots.dims(ignored);
+        slots.path_chip(branch_chip);
     }
 }
