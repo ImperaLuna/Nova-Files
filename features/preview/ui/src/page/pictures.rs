@@ -118,7 +118,10 @@ fn gather(blocks: &[Block], gathered: &mut Gathered) {
     for block in blocks {
         match block {
             Block::Picture { target, .. } => gathered.targets.push(Arc::clone(target)),
-            Block::Figure { kind, source } => gathered.figures.push((*kind, Arc::clone(source))),
+            Block::Figure {
+                kind: kind @ FigureKind::Diagram,
+                source,
+            } => gathered.figures.push((*kind, Arc::clone(source))),
             Block::Quote(inner) | Block::Note { blocks: inner, .. } => gather(inner, gathered),
             Block::List { items, .. } => {
                 for item in items.iter() {

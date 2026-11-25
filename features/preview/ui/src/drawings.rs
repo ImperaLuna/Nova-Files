@@ -1,9 +1,10 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use gpui::Context;
+use gpui::{App, Context, RenderImage};
 use nova_files_api::{Fit, Picture};
 use nova_files_preview_api::{Command, PreviewId};
+use nova_files_shell::theme::Colors;
 
 use crate::looks::render_image;
 use nova_files_shell::device::device_side;
@@ -12,10 +13,12 @@ use crate::page::{PICTURE_ROOM, PICTURE_TALL, Page};
 use crate::{PreviewPart, release};
 
 const PERCENT: f32 = 100.0;
+const LIGHT_SUM: f32 = 1.5;
 const MAX_ZOOM_PERCENT: f32 = 400.0;
 
 impl PreviewPart {
-    pub(crate) fn ask_pictures(&self, id: PreviewId) {
+    pub(crate) fn ask_pictures(&self, id: PreviewId, cx: &App) {
+        let light = light(&Colors::of(cx));
         let Some(open) = self.looks.open.as_ref().filter(|open| open.asked == id) else {
             return;
         };
@@ -41,6 +44,7 @@ impl PreviewPart {
                 kind: *kind,
                 source: Arc::clone(source),
                 zoom_percent,
+                light,
                 fit,
             };
             self.host.link.send(figure).ok();
@@ -63,30 +67,9 @@ impl PreviewPart {
         drawn: Option<Picture>,
         cx: &Context<Self>,
     ) {
-        let Some(drawn) = drawn.filter(|_| self.page_of(id).is_some()) else {
-            return;
-        };
-        let converting = cx
-            .background_executor()
-            .spawn(async move { render_image(&drawn) });
-        cx.spawn(async move |this, cx| {
-            let Some(image) = converting.await.map(Arc::new) else {
-                return;
-            };
-            this.update(cx, |this, cx| {
-                let released = match this.page_of_mut(id) {
-                    Some(page) => {
-                        page.list.remeasure();
-                        page.pictures.arrived(&picture, &image)
-                    }
-                    None => vec![image],
-                };
-                release(released, cx);
-                cx.notify();
-            })
-            .ok();
-        })
-        .detach();
+        self.place(id, drawn, cx, move |page, image| {
+            page.pictures.arrived(&picture, &image)
+        });
     }
 
     pub(crate) fn figured(
@@ -95,6 +78,18 @@ impl PreviewPart {
         source: Arc<str>,
         drawn: Option<Picture>,
         cx: &Context<Self>,
+    ) {
+        self.place(id, drawn, cx, move |page, image| {
+            page.pictures.figured(&source, image).into_iter().collect()
+        });
+    }
+
+    fn place(
+        &self,
+        id: PreviewId,
+        drawn: Option<Picture>,
+        cx: &Context<Self>,
+        put: impl FnOnce(&mut Page, Arc<RenderImage>) -> Vec<Arc<RenderImage>> + 'static,
     ) {
         let Some(drawn) = drawn.filter(|_| self.page_of(id).is_some()) else {
             return;
@@ -110,9 +105,9 @@ impl PreviewPart {
                 let released = match this.page_of_mut(id) {
                     Some(page) => {
                         page.list.remeasure();
-                        page.pictures.figured(&source, image)
+                        put(page, image)
                     }
-                    None => Some(image),
+                    None => vec![image],
                 };
                 release(released, cx);
                 cx.notify();
@@ -149,4 +144,9 @@ fn zoom_percent(scale_factor: f32) -> u16 {
     )]
     let percent = percent as u16;
     percent
+}
+
+fn light(colors: &Colors) -> bool {
+    let window = colors.window;
+    window.r + window.g + window.b > LIGHT_SUM
 }

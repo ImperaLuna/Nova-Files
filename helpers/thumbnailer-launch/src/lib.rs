@@ -19,6 +19,8 @@ const PASSED_VARS: [&str; 4] = ["PATH", "HOME", "XDG_DATA_HOME", "XDG_DATA_DIRS"
 const READER_THREAD: &str = "nova-files-thumbnail-reader";
 const PREVIEW_FLAG: &str = "--preview";
 const DIAGRAM_FLAG: &str = "--diagram";
+const LIGHT_WORD: &str = "light";
+const DARK_WORD: &str = "dark";
 const BYTES_PER_PIXEL: u64 = 4;
 const MAX_SIZE_LINE: usize = 32;
 const MAX_FRAMES: usize = 2000;
@@ -139,7 +141,7 @@ pub fn picture(
 
 pub fn diagram(
     helper: &Path,
-    (source, zoom_percent): (&str, u16),
+    (source, zoom_percent, light): (&str, u16, bool),
     fit: Fit,
     running: &Running,
     wanted: impl Fn() -> bool,
@@ -151,6 +153,7 @@ pub fn diagram(
         .arg(fit.width.to_string())
         .arg(fit.height.to_string())
         .arg(zoom_percent.to_string())
+        .arg(if light { LIGHT_WORD } else { DARK_WORD })
         .arg(source);
     let mut frames = pictures_from(command, fit, running, wanted)?;
     (frames.len() == 1).then(|| frames.remove(0).0)

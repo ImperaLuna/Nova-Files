@@ -641,7 +641,7 @@ impl PreviewPart {
         if self.previewing() {
             self.start_playing();
         }
-        self.ask_pictures(id);
+        self.ask_pictures(id, cx);
         cx.notify();
     }
 }

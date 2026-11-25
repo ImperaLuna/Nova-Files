@@ -7,16 +7,18 @@ use mermaid_svg::Theme;
 use crate::{preview, sandbox, vector};
 
 pub const FLAG: &str = "--diagram";
-pub const USAGE: &str =
-    "usage: nova-files-thumbnailer --diagram <width> <height> <zoom percent> <mermaid source>";
+pub const USAGE: &str = "usage: nova-files-thumbnailer --diagram <width> <height> <zoom percent> <light|dark> <mermaid source>";
 pub const MAX_SOURCE_BYTES: usize = 16 * 1024;
 const PERCENT: f32 = 100.0;
+const LIGHT_WORD: &str = "light";
+const DARK_WORD: &str = "dark";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Request {
     pub width: u32,
     pub height: u32,
     pub zoom: f32,
+    pub light: bool,
     pub source: String,
 }
 
@@ -33,11 +35,17 @@ impl Request {
         let width = u32::from(number(args.next())?);
         let height = u32::from(number(args.next())?);
         let zoom = f32::from(number(args.next())?) / PERCENT;
+        let light = match args.next()?.to_str()? {
+            LIGHT_WORD => true,
+            DARK_WORD => false,
+            _ => return None,
+        };
         let source = args.next()?.into_string().ok()?;
         (source.len() <= MAX_SOURCE_BYTES && args.next().is_none()).then_some(Self {
             width,
             height,
             zoom,
+            light,
             source,
         })
     }
@@ -48,7 +56,12 @@ pub fn run(request: &Request) -> ExitCode {
         writeln!(io::stderr(), "could not start the sandbox: {error}").ok();
         return ExitCode::FAILURE;
     }
-    let Ok(drawing) = mermaid_svg::render_with(&request.source, &Theme::dark()) else {
+    let theme = if request.light {
+        Theme::default()
+    } else {
+        Theme::dark()
+    };
+    let Ok(drawing) = mermaid_svg::render_with(&request.source, &theme) else {
         return ExitCode::FAILURE;
     };
     let room = (request.width, request.height);
@@ -72,14 +85,16 @@ mod tests {
 
     #[test]
     fn a_request_names_a_box_a_zoom_and_the_source() {
-        let request = Request::from_args(args(&["800", "600", "200", "graph TD; A-->B"])).unwrap();
+        let request =
+            Request::from_args(args(&["800", "600", "200", "dark", "graph TD; A-->B"])).unwrap();
         assert_eq!((request.width, request.height), (800, 600));
         assert!((request.zoom - 2.0).abs() < f32::EPSILON);
         assert_eq!(request.source, "graph TD; A-->B");
-        assert!(Request::from_args(args(&["800", "600", "0", "graph TD"])).is_none());
-        assert!(Request::from_args(args(&["800", "600", "100"])).is_none());
+        assert!(Request::from_args(args(&["800", "600", "0", "dark", "graph TD"])).is_none());
+        assert!(Request::from_args(args(&["800", "600", "100", "pink", "graph TD"])).is_none());
+        assert!(Request::from_args(args(&["800", "600", "100", "dark"])).is_none());
         let long = "a".repeat(MAX_SOURCE_BYTES + 1);
-        assert!(Request::from_args(args(&["8", "6", "100", &long])).is_none());
+        assert!(Request::from_args(args(&["8", "6", "100", "light", &long])).is_none());
     }
 
     #[test]
