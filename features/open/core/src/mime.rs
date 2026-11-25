@@ -94,6 +94,7 @@ impl MimeTypes {
                 types.generic_icons.entry(mime).or_insert(icon);
             }
         }
+        types.add_known_names(order);
         types
     }
 
@@ -310,5 +311,6 @@ fn read_capped(path: &Path) -> Option<String> {
 }
 
 mod icons;
+mod known_names;
 #[cfg(test)]
 mod tests;

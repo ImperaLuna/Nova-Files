@@ -393,3 +393,59 @@ fn a_types_kind_comes_from_its_media_then_its_generic_icon() {
     assert_eq!(kind("application/pdf"), IconKind::File);
     assert_eq!(kind(ANY_FILE), IconKind::File);
 }
+
+#[test]
+fn a_text_type_that_runs_takes_the_script_icon_before_its_program_parent() {
+    let dir = Dir::new("script-icons");
+    dir.write(
+        GLOBS_FILE,
+        "60:text/x-python:*.py\n50:text/x-python3:*.py\n",
+    )
+    .write(
+        SUBCLASSES_FILE,
+        "text/x-python3 text/x-python\n\
+             text/x-python application/x-executable\n\
+             text/x-python text/plain\n",
+    )
+    .write(
+        GENERIC_ICONS_FILE,
+        "application/x-executable:application-x-executable\n",
+    );
+    let types = MimeTypes::load(std::slice::from_ref(&dir.0.path().to_path_buf()));
+    assert_eq!(of(&types, "main.py"), Some("text/x-python"));
+    assert_eq!(
+        types.icon_names("text/x-python3"),
+        [
+            "text-x-python3",
+            "text-x-python",
+            "text-plain",
+            "text-x-script",
+            "application-x-executable",
+            "text-x-generic",
+        ]
+    );
+    assert_eq!(types.icon_kind("text/x-python"), IconKind::Text);
+}
+
+#[test]
+fn a_known_file_name_wins_over_its_ending() {
+    let dir = Dir::new("known-names");
+    dir.write(
+        GLOBS_FILE,
+        "50:audio/x-mod:*.mod\n50:application/x-ruby:*.rb\n100:text/x-mine:*.lock\n",
+    );
+    let types = MimeTypes::load(std::slice::from_ref(&dir.0.path().to_path_buf()));
+    assert_eq!(of(&types, "go.mod"), Some("text/x-go-mod"));
+    assert_eq!(of(&types, "song.mod"), Some("audio/x-mod"));
+    assert_eq!(of(&types, "Dockerfile"), Some("text/x-dockerfile"));
+    assert_eq!(of(&types, "dockerfile"), Some("text/x-dockerfile"));
+    assert_eq!(of(&types, "Gemfile"), Some("application/x-ruby"));
+    assert_eq!(of(&types, "Cargo.lock"), Some("application/toml"));
+    assert_eq!(
+        types
+            .icon_names("text/x-dockerfile")
+            .last()
+            .map(String::as_str),
+        Some("text-x-generic")
+    );
+}
