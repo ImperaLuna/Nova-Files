@@ -23,6 +23,7 @@ pub struct GitPart {
     host: Host,
     asked: Option<PathBuf>,
     marks: Option<Marks>,
+    in_repo: bool,
 }
 
 impl GitPart {
@@ -54,6 +55,7 @@ impl GitPart {
         if let Event::Marks { folder, marks } = event
             && self.asked.as_ref() == Some(&folder)
         {
+            self.in_repo = marks.is_some();
             self.marks = marks;
             cx.notify();
         }
@@ -82,13 +84,21 @@ fn row_mark(part: &GitPart, entry: &Entry, cx: &App) -> Option<AnyElement> {
     )
 }
 
+fn marks_shown(part: &GitPart, scene: &Scene, _: &App) -> bool {
+    part.in_repo
+        && part
+            .asked
+            .as_ref()
+            .is_some_and(|asked| scene.in_folder(asked))
+}
+
 fn branch_chip(
     part: &mut GitPart,
     scene: &Scene,
     _: &mut Window,
     cx: &mut Context<GitPart>,
 ) -> Option<AnyElement> {
-    if !scene.in_folder(part.asked.as_ref()?) {
+    if !marks_shown(part, scene, cx) {
         return None;
     }
     let repo = &part.marks.as_ref()?.repo;
@@ -129,6 +139,7 @@ impl Part for GitPart {
             host: host.clone(),
             asked: None,
             marks: None,
+            in_repo: false,
         }
     }
 
@@ -136,7 +147,7 @@ impl Part for GitPart {
         slots.on_event(Self::heard);
         slots.sends::<Command>();
         slots.listed(Self::listed);
-        slots.row_mark(row_mark);
+        slots.row_mark(marks_shown, row_mark);
         slots.dims(ignored);
         slots.path_chip(branch_chip);
     }
