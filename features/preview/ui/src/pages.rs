@@ -246,7 +246,7 @@ mod tests {
         pages.scroll.set_offset(point(px(0.0), px(-1648.0)));
         let (asking, gone) = pages.next_asks(&layout, px(500.0));
         assert_eq!(asking, vec![4, 3, 5]);
-        assert!(gone.is_empty());
+        assert_eq!(gone.len(), 0);
         assert_eq!(pages.next_asks(&layout, px(500.0)).0, Vec::<usize>::new());
         pages.waiting.remove(&4);
         assert_eq!(pages.next_asks(&layout, px(500.0)).0, vec![2]);
