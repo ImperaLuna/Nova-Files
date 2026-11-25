@@ -106,13 +106,13 @@ fn figured(current: &Current, helper: &Path, asked: &FigureAsked) -> Option<Pict
     if !wanted() {
         return None;
     }
-    match asked.kind {
-        FigureKind::Diagram => {
-            let source = (&*asked.source, asked.zoom_percent, asked.light);
-            launch::diagram(helper, source, asked.fit, &drawing.running, wanted)
-        }
-        FigureKind::Formula => None,
-    }
+    let figure = match asked.kind {
+        FigureKind::Diagram => launch::Figure::Diagram,
+        FigureKind::Formula => launch::Figure::Formula,
+    };
+    let looks = (asked.zoom_percent, asked.light, asked.fit);
+    let source = (figure, &*asked.source);
+    launch::figure(helper, source, looks, &drawing.running, wanted)
 }
 
 fn drawn(current: &Current, helper: &Path, asked: &Asked) -> Option<Picture> {

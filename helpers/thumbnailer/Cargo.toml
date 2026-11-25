@@ -7,6 +7,7 @@
 # - hayro
 # - image
 # - landlock
+# - latex-rust
 # - mermaid-svg
 # - resvg
 # - rustix
@@ -24,6 +25,9 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+# Lays out TeX maths as SVG in pure Rust with its own STIX font, for Markdown
+# quick looks.
+latex-rust = { version = "2.1.1", default-features = false }
 # Lays out Mermaid diagrams as SVG in pure Rust, for Markdown quick looks.
 mermaid-svg = { version = "0.7.0", default-features = false }
 # Reads PDF pages in pure Rust, so a document needs nothing installed.
