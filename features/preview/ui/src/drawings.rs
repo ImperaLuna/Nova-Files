@@ -6,18 +6,24 @@ use nova_files_api::{Fit, Picture};
 use nova_files_preview_api::{Command, PreviewId};
 
 use crate::looks::render_image;
-use crate::page::Page;
-use crate::{PreviewPart, release};
+use nova_files_shell::device::device_side;
 
-const PICTURE_FIT: Fit = Fit {
-    width: 1600,
-    height: 1600,
-};
+use crate::page::{PICTURE_ROOM, PICTURE_TALL, Page};
+use crate::{PreviewPart, release};
 
 impl PreviewPart {
     pub(crate) fn ask_pictures(&self, id: PreviewId) {
         let Some(open) = self.looks.open.as_ref().filter(|open| open.asked == id) else {
             return;
+        };
+        let scale_factor = self
+            .looks
+            .room
+            .map_or(1.0, |(_, scale_factor)| scale_factor);
+        let width = device_side(PICTURE_ROOM, scale_factor);
+        let fit = Fit {
+            width,
+            height: width.saturating_mul(PICTURE_TALL),
         };
         let Some(shown) = open.current() else {
             return;
@@ -30,7 +36,7 @@ impl PreviewPart {
                 id,
                 document: preview.path.clone(),
                 picture: picture.clone(),
-                fit: PICTURE_FIT,
+                fit,
             };
             self.host.link.send(draw).ok();
         }

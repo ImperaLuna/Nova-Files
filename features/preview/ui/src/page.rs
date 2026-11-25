@@ -25,6 +25,9 @@ pub use pictures::Pictures;
 
 const PAGE_WIDTH: Pixels = px(760.0);
 const PAGE_PAD_X: Pixels = px(32.0);
+pub const PICTURE_ROOM: Pixels = px(696.0);
+pub const PICTURE_TALL: u32 = 2;
+const BOTH_SIDES: f32 = 2.0;
 const OVERDRAW: Pixels = px(600.0);
 const SCROLL_STEP_SHARE: f32 = 0.9;
 const CODE_ROW_LINES: usize = 32;
@@ -77,14 +80,12 @@ impl Page {
         row.is_some()
     }
 
-    pub fn carrying(mut self, before: Option<Self>) -> (Self, Vec<Arc<RenderImage>>) {
+    pub fn carrying(self, before: Option<Self>) -> (Self, Vec<Arc<RenderImage>>) {
         let Some(before) = before else {
             return (self, Vec::new());
         };
         self.list.scroll_to(before.list.logical_scroll_top());
-        let (pictures, released) = self.pictures.carrying(before.pictures);
-        self.pictures = pictures;
-        (self, released)
+        (self, before.images().collect())
     }
 
     pub fn images(self) -> impl Iterator<Item = Arc<RenderImage>> {
@@ -115,7 +116,7 @@ pub fn page_art(
         mono,
         follow,
         pictures: Rc::clone(&page.pictures.drawn),
-        room: ((width - PAGE_PAD_X * 2.0).max(Pixels::ZERO), scale_factor),
+        room: ((width - PAGE_PAD_X * BOTH_SIDES).max(Pixels::ZERO), scale_factor),
     };
     gpui::div()
         .debug_selector(|| "preview-markdown".to_owned())

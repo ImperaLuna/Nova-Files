@@ -297,6 +297,7 @@ fn picture(target: &Arc<str>, alt: &str, paint: &Paint) -> AnyElement {
     };
     img(Arc::clone(image))
         .w(shown)
+        .max_w_full()
         .h(height * share)
         .rounded(radius::ROW)
         .into_any_element()

@@ -8,7 +8,7 @@ use nova_files_preview_api::markdown::Block;
 
 use crate::links::{Link, link};
 
-pub const DRAWN_PICTURES: usize = 24;
+pub const DRAWN_PICTURES: usize = 12;
 
 pub type Drawn = Rc<HashMap<Arc<str>, Arc<RenderImage>>>;
 
@@ -38,17 +38,6 @@ impl Pictures {
             wanted,
             drawn: Rc::default(),
         }
-    }
-
-    pub fn carrying(mut self, before: Self) -> (Self, Vec<Arc<RenderImage>>) {
-        let mut before = Rc::unwrap_or_clone(before.drawn);
-        let kept: HashMap<_, _> = self
-            .wanted
-            .iter()
-            .filter_map(|(target, _)| before.remove_entry(target))
-            .collect();
-        self.drawn = Rc::new(kept);
-        (self, before.into_values().collect())
     }
 
     pub fn asking(&self) -> impl Iterator<Item = &PathBuf> {
