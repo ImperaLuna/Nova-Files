@@ -62,7 +62,7 @@ fn preview(client: &Client, id: u64, path: PathBuf) -> Result<Arc<Preview>, Unre
 #[test]
 fn a_text_file_shows_its_text_and_size() {
     let bench = Bench::new("preview-text");
-    let path = bench.at("notes.md");
+    let path = bench.at("notes.txt");
     let notes = "# Notes\n\n- one\n";
     fs::write(&path, notes).unwrap();
     let shown = preview(&client(&bench), 1, path.clone()).unwrap();
