@@ -323,6 +323,10 @@ impl WindowParts {
             .find_map(|part| part.row_icon(entry, side, cx))
     }
 
+    pub fn marks_shown(&self, scene: &Scene, cx: &App) -> bool {
+        self.opened.iter().any(|part| part.marks_shown(scene, cx))
+    }
+
     pub fn row_mark(&self, entry: &Entry, cx: &App) -> Option<AnyElement> {
         self.opened.iter().find_map(|part| part.row_mark(entry, cx))
     }

@@ -192,7 +192,7 @@ pub struct Slots<P> {
     pub(crate) islands: Vec<(Applies<P>, Card<P>)>,
     pub(crate) questions: Vec<(&'static Question, Asks<P>, Card<P>)>,
     pub(crate) row_icons: Vec<RowIcon<P>>,
-    pub(crate) row_marks: Vec<RowMark<P>>,
+    pub(crate) row_marks: Vec<(Applies<P>, RowMark<P>)>,
     pub(crate) row_pictures: Vec<RowPicture<P>>,
     pub(crate) opens: Vec<Opens<P>>,
     pub(crate) typed: Vec<Typed<P>>,
@@ -501,8 +501,8 @@ impl<P: Part> Slots<P> {
         self.row_icons.push(icon);
     }
 
-    pub fn row_mark(&mut self, mark: RowMark<P>) {
-        self.row_marks.push(mark);
+    pub fn row_mark(&mut self, shown: Applies<P>, mark: RowMark<P>) {
+        self.row_marks.push((shown, mark));
     }
 
     pub fn row_picture(&mut self, picture: RowPicture<P>) {

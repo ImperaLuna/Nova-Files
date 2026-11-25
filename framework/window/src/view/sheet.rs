@@ -220,6 +220,7 @@ impl MainWindow {
         (name, marks): (String, Vec<std::ops::Range<usize>>),
         cx: &Context<Self>,
     ) -> Stateful<Div> {
+        let marks_shown = self.parts.marks_shown(&self.scene(cx), cx);
         let colors = &Colors::of(cx);
         let hidden = entry.is_hidden();
         let row = self.entry_drag(at, entry, cx);
@@ -229,6 +230,16 @@ impl MainWindow {
             .items_center()
             .gap(size::NAME_GAP)
             .when(hidden, |line| line.text_color(colors.text_dim))
+            .when(marks_shown, |line| {
+                line.child(
+                    div()
+                        .flex()
+                        .flex_none()
+                        .justify_center()
+                        .w(size::MARK_WIDTH)
+                        .children(self.parts.row_mark(entry, cx)),
+                )
+            })
             .child(
                 div()
                     .flex_none()
@@ -257,11 +268,6 @@ impl MainWindow {
                     |field| rename_box(field, colors).into_any_element(),
                 )
             }))
-            .children(
-                self.parts
-                    .row_mark(entry, cx)
-                    .map(|mark| div().flex().flex_1().justify_end().child(mark)),
-            )
     }
 
     fn empty_note(&self, colors: &Colors, cx: &Context<Self>) -> Option<impl IntoElement> {
@@ -447,7 +453,15 @@ impl MainWindow {
         let widths = self.column_widths(cx);
         let shown = (part.is_some(), folder.is_some());
         let grips = self.column_grips(shown, widths, cx);
-        column_heads(order, Middle { part, folder }, widths, colors, cx).children(grips)
+        let marks_shown = self.parts.marks_shown(&self.scene(cx), cx);
+        column_heads(
+            order,
+            (marks_shown, Middle { part, folder }),
+            widths,
+            colors,
+            cx,
+        )
+        .children(grips)
     }
 
     fn column_widths(&self, cx: &App) -> ColumnWidths {
@@ -499,7 +513,7 @@ fn folder_head() -> AnyElement {
 
 fn column_heads(
     order: Option<Order>,
-    middle: Middle,
+    (marks_shown, middle): (bool, Middle),
     widths: ColumnWidths,
     colors: &Colors,
     cx: &Context<MainWindow>,
@@ -527,7 +541,12 @@ fn column_heads(
                 .items_center()
                 .h_full()
                 .child(cells(
-                    div().flex().child(head(SortKey::Name, NAME_LABEL)),
+                    div()
+                        .flex()
+                        .when(marks_shown, |name| {
+                            name.pl(size::MARK_WIDTH + size::NAME_GAP)
+                        })
+                        .child(head(SortKey::Name, NAME_LABEL)),
                     middle,
                     (
                         head(SortKey::Kind, KIND_LABEL),

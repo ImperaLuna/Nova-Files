@@ -83,6 +83,7 @@ trait OpenPart {
     fn asked(&self, asking: Option<Asking<'_>>, window: &mut Window, cx: &mut App);
     fn question(&self, question: &'static Question) -> Option<AnyView>;
     fn row_icon(&self, entry: &Entry, side: Pixels, cx: &App) -> Option<AnyElement>;
+    fn marks_shown(&self, scene: &Scene, cx: &App) -> bool;
     fn row_mark(&self, entry: &Entry, cx: &App) -> Option<AnyElement>;
     fn row_picture(&self, entry: &Entry, cx: &App) -> Option<Arc<RenderImage>>;
     fn open_entry(&self, entry: &Entry, path: &Path, cx: &mut App) -> bool;
@@ -424,12 +425,20 @@ impl<P: Part> OpenPart for Opened<P> {
             .find_map(|icon| icon(part, entry, side, cx))
     }
 
+    fn marks_shown(&self, scene: &Scene, cx: &App) -> bool {
+        let part = self.entity.read(cx);
+        self.slots
+            .row_marks
+            .iter()
+            .any(|(shown, _)| shown(part, scene, cx))
+    }
+
     fn row_mark(&self, entry: &Entry, cx: &App) -> Option<AnyElement> {
         let part = self.entity.read(cx);
         self.slots
             .row_marks
             .iter()
-            .find_map(|mark| mark(part, entry, cx))
+            .find_map(|(_, mark)| mark(part, entry, cx))
     }
 
     fn row_picture(&self, entry: &Entry, cx: &App) -> Option<Arc<RenderImage>> {

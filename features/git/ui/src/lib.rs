@@ -82,13 +82,21 @@ fn row_mark(part: &GitPart, entry: &Entry, cx: &App) -> Option<AnyElement> {
     )
 }
 
+fn marks_shown(part: &GitPart, scene: &Scene, _: &App) -> bool {
+    part.marks.is_some()
+        && part
+            .asked
+            .as_ref()
+            .is_some_and(|asked| scene.in_folder(asked))
+}
+
 fn branch_chip(
     part: &mut GitPart,
     scene: &Scene,
     _: &mut Window,
     cx: &mut Context<GitPart>,
 ) -> Option<AnyElement> {
-    if !scene.in_folder(part.asked.as_ref()?) {
+    if !marks_shown(part, scene, cx) {
         return None;
     }
     let repo = &part.marks.as_ref()?.repo;
@@ -136,7 +144,7 @@ impl Part for GitPart {
         slots.on_event(Self::heard);
         slots.sends::<Command>();
         slots.listed(Self::listed);
-        slots.row_mark(row_mark);
+        slots.row_mark(marks_shown, row_mark);
         slots.dims(ignored);
         slots.path_chip(branch_chip);
     }

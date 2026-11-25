@@ -50,6 +50,9 @@ async fn rows_in_a_repository_show_what_changed_and_dim_what_is_ignored(cx: &mut
     assert!(cx.debug_bounds("git-mark-kept.txt").is_some());
     assert!(cx.debug_bounds("git-mark-fresh.txt").is_some());
     assert!(cx.debug_bounds("git-mark-target").is_none());
+    let mark = cx.debug_bounds("git-mark-kept.txt").unwrap();
+    let name = cx.debug_bounds("name-0").unwrap();
+    assert!(mark.right() < name.left());
     assert!(cx.debug_bounds("git-mark-.gitignore").is_none());
     assert!(cx.debug_bounds(BRANCH_CHIP).is_some());
     assert!(cx.debug_bounds(CHIP_CHANGES).is_some());
