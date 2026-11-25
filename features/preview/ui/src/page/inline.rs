@@ -1,11 +1,36 @@
 use std::ops::Range;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use gpui::{
-    FontStyle, HighlightStyle, SharedString, StrikethroughStyle, StyledText, UnderlineStyle,
+    AnyElement, FontStyle, HighlightStyle, InteractiveText, IntoElement as _, SharedString,
+    StrikethroughStyle, StyledText, UnderlineStyle,
 };
 use nova_files_preview_api::markdown::{Inline, Look, Span};
 use nova_files_shell::theme::{Colors, size, text};
+
+use super::Paint;
+
+const LINK_ID: &str = "markdown-link";
+
+pub fn words(inline: &Inline, paint: &Paint) -> AnyElement {
+    let styled = styled(inline, &paint.colors);
+    let (ranges, targets): (Vec<_>, Vec<_>) = ranges(&inline.spans)
+        .filter_map(|(range, span)| Some((range, Arc::clone(span.link.as_ref()?))))
+        .unzip();
+    if ranges.is_empty() {
+        return styled.into_any_element();
+    }
+    let id = Arc::as_ptr(&inline.text).cast::<u8>().addr();
+    let follow = Rc::clone(&paint.follow);
+    InteractiveText::new((LINK_ID, id), styled)
+        .on_click(ranges, move |index, window, cx| {
+            if let Some(target) = targets.get(index) {
+                follow(target, window, cx);
+            }
+        })
+        .into_any_element()
+}
 
 pub fn styled(inline: &Inline, colors: &Colors) -> StyledText {
     let highlights: Vec<(Range<usize>, HighlightStyle)> = ranges(&inline.spans)

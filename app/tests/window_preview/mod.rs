@@ -347,3 +347,31 @@ async fn pictures_are_asked_to_fit_the_room_the_window_has(cx: &mut TestAppConte
     assert!(wider.width > smaller.width);
     assert_eq!(wider.height, smaller.height);
 }
+
+#[gpui::test]
+async fn a_link_to_a_note_beside_it_moves_the_quick_look_there(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("preview-link");
+    fs::write(
+        tree.path().join("a.md"),
+        "[the b note](b.md)\n\nmore words\n",
+    )
+    .unwrap();
+    fs::write(tree.path().join("b.md"), "# B\n").unwrap();
+    cx.update(nova_files_window::bind_window_keys);
+    let (view, cx) = open_on(cx, tree.path()).await;
+    cx.run_until_parked();
+    let names = view.read_with(cx, |view, _| view.entry_names());
+    let a = names.iter().position(|name| name == "a.md").unwrap();
+    let selector: &'static str = format!("entry-{a}").leak();
+
+    click(cx, selector);
+    cx.simulate_keystrokes("space");
+    wait_for_preview(&view, cx, "a.md").await;
+    cx.run_until_parked();
+    let page = cx.debug_bounds("preview-markdown").unwrap();
+    let on_link = page.origin + gpui::point(px(48.0), px(32.0));
+    counted_click(cx, on_link, 1);
+    wait_for_preview(&view, cx, "b.md").await;
+    assert_eq!(selected(&view, cx), ["b.md"]);
+}

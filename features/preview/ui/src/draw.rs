@@ -1,4 +1,5 @@
 use std::ffi::OsStr;
+use std::rc::Rc;
 use std::sync::Arc;
 
 use gpui::{
@@ -18,7 +19,7 @@ use nova_files_shell::widgets::{icon, icon_button, kind_icon};
 use crate::PreviewPart;
 use crate::code::Coded;
 use crate::looks::{QuickLook, Shown};
-use crate::page::page_art;
+use crate::page::{Follow, page_art};
 use crate::pages::{Layout, Pages};
 use crate::player::{self, art_room, bar_width, media_art};
 
@@ -54,7 +55,13 @@ pub fn layer(
 ) -> AnyElement {
     let colors = Colors::of(cx);
     let current = open.current().map(|shown| about(shown, room));
-    let art = stage_art(open, listing, entry, (room, scale_factor, true), &colors);
+    let follow = PreviewPart::follow(cx);
+    let art = stage_art(
+        (open, listing, entry),
+        (room, scale_factor, true),
+        &follow,
+        &colors,
+    );
     let media = open.current().and_then(|shown| shown.media.as_ref());
     let art = kept_open(art).debug_selector(|| "preview-art".to_owned());
     let art = if media.is_some_and(|media| media.video) {
@@ -113,10 +120,9 @@ pub fn layer(
 }
 
 pub fn stage_art(
-    open: &QuickLook,
-    listing: &Listing,
-    entry: &Entry,
+    (open, listing, entry): (&QuickLook, &Listing, &Entry),
     (room, scale_factor, scrolls): (gpui::Size<Pixels>, f32, bool),
+    follow: &Follow,
     colors: &Colors,
 ) -> AnyElement {
     open.shown.as_ref().map_or_else(
@@ -126,6 +132,7 @@ pub fn stage_art(
                 shown,
                 shown_entry(shown, listing, entry),
                 (room, scale_factor, scrolls, open.source),
+                follow,
                 colors,
             )
         },
@@ -150,6 +157,7 @@ fn art(
     shown: &Shown,
     entry: &Entry,
     (room, scale_factor, scrolls, source): (gpui::Size<Pixels>, f32, bool, bool),
+    follow: &Follow,
     colors: &Colors,
 ) -> AnyElement {
     let Some(preview) = shown.preview.as_deref() else {
@@ -164,7 +172,10 @@ fn art(
         (PreviewContent::Markdown { .. }, _) if !source && shown.page.is_some() => {
             shown.page.as_ref().zip(shown.code.as_deref()).map_or_else(
                 || big_icon(name, kind, colors),
-                |(page, coded)| page_art(page, coded.family.clone(), room, colors),
+                |(page, coded)| {
+                    let reading = (coded.family.clone(), Rc::clone(follow));
+                    page_art(page, reading, room, colors)
+                },
             )
         }
         (PreviewContent::Code { text, .. } | PreviewContent::Markdown { text, .. }, _) => {
