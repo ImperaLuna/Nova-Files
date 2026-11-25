@@ -147,7 +147,8 @@ in
   # run data/install.sh; each mode installs what it should.
   install-layout = pkgs.runCommand "nova-files-install-layout" { } ''
     mkdir programs
-    touch programs/nova-files programs/nova-files-thumbnailer programs/nova-files-archiver
+    touch programs/nova-files programs/nova-files-thumbnailer programs/nova-files-archiver \
+      programs/nova-files-player
     for mode in launcher basic full; do
       bash ${../data}/install.sh --mode $mode --prefix $PWD/$mode --from programs \
         --app-id ${build.appId} --portal-bus-name ${build.portalBusName}
@@ -159,6 +160,7 @@ in
     diff <(list launcher) - <<EOF
     bin/nova-files
     bin/nova-files-archiver
+    bin/nova-files-player
     bin/nova-files-thumbnailer
     share/dbus-1/services/${build.appId}.service
     EOF

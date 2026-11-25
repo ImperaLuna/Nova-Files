@@ -26,6 +26,8 @@ let
     libxcursor
     libxi
     libxrandr
+    # The player helper opens libmpv at run time.
+    mpv-unwrapped
   ];
 
   # Hashes of the git dependencies, so they are fetched as ordinary store
