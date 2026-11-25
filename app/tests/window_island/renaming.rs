@@ -386,9 +386,8 @@ async fn a_double_click_on_a_selected_name_opens_and_never_renames(cx: &mut Test
     click_at(cx, name, 1);
     click_at(cx, name, 2);
     wait(cx);
+    wait_for_folder(&view, cx, &tree.path().join("Projects")).await;
     assert!(!view.read_with(cx, MainWindow::renaming));
-    let here = view.read_with(cx, |view, _| view.folder().map(Path::to_path_buf));
-    assert_eq!(here, Some(tree.path().join("Projects")));
 }
 
 #[gpui::test]
