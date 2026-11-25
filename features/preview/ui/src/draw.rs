@@ -161,10 +161,12 @@ fn art(
             picture_art(picture, room, scale_factor, colors).into_any_element()
         }
         (PreviewContent::Text { text, .. }, _) => text_art(text, room, colors).into_any_element(),
-        (PreviewContent::Code { text, .. }, _) => shown.code.as_deref().map_or_else(
-            || text_art(text, room, colors).into_any_element(),
-            |coded| code_art(coded, room, colors).into_any_element(),
-        ),
+        (PreviewContent::Code { text, .. } | PreviewContent::Markdown { text, .. }, _) => {
+            shown.code.as_deref().map_or_else(
+                || text_art(text, room, colors).into_any_element(),
+                |coded| code_art(coded, room, colors).into_any_element(),
+            )
+        }
         (PreviewContent::Folder { first, count }, _) => folder_art(first, *count, colors),
         (PreviewContent::Document { .. }, _) => {
             shown.pages.as_ref().filter(|_| scrolls).map_or_else(

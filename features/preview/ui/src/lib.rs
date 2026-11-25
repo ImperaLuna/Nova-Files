@@ -548,7 +548,10 @@ impl PreviewPart {
             return;
         };
         let code = match preview.as_deref().map(|preview| &preview.content) {
-            Some(PreviewContent::Code { text, runs, .. }) => {
+            Some(
+                PreviewContent::Code { text, runs, .. }
+                | PreviewContent::Markdown { text, runs, .. },
+            ) => {
                 let family = code::mono_family(cx);
                 Some(Arc::new(code::Coded::new(text, runs, family)))
             }

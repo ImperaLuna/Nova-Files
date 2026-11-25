@@ -48,10 +48,18 @@ static SCOPES: LazyLock<Vec<(Scope, Mark)>> = LazyLock::new(|| {
 });
 
 pub fn runs(name: &OsStr, text: &str, cancelled: impl Fn() -> bool) -> Option<Vec<Run>> {
+    marked(syntax(name, text)?, text, cancelled)
+}
+
+pub fn fence_runs(language: &str, text: &str) -> Option<Vec<Run>> {
+    let syntax = SYNTAXES.find_syntax_by_token(language)?;
+    marked(syntax, text, || false)
+}
+
+fn marked(syntax: &SyntaxReference, text: &str, cancelled: impl Fn() -> bool) -> Option<Vec<Run>> {
     if text.split('\n').any(|line| line.len() > LONGEST_LINE) {
         return None;
     }
-    let syntax = syntax(name, text)?;
     let mut state = ParseState::new(syntax);
     let mut stack = ScopeStack::new();
     let mut runs = Runs::default();
@@ -100,10 +108,10 @@ fn mark(stack: &ScopeStack) -> Mark {
 }
 
 #[derive(Default)]
-struct Runs(Vec<Run>);
+pub struct Runs(Vec<Run>);
 
 impl Runs {
-    fn push(&mut self, mark: Mark, bytes: usize) {
+    pub fn push(&mut self, mark: Mark, bytes: usize) {
         let Ok(bytes) = u32::try_from(bytes) else {
             return;
         };
@@ -114,6 +122,10 @@ impl Runs {
             Some(last) if last.mark == mark => last.bytes += bytes,
             _ => self.0.push(Run { bytes, mark }),
         }
+    }
+
+    pub fn into_runs(self) -> Vec<Run> {
+        self.0
     }
 }
 
@@ -180,6 +192,13 @@ mod tests {
         assert!(runs(OsStr::new("notes.txt"), "just words\n", || false).is_none());
         assert!(runs(OsStr::new("README"), "just words\n", || false).is_none());
         assert!(runs(OsStr::new("notes.md"), "# Notes\n", || false).is_none());
+    }
+
+    #[test]
+    fn a_fence_is_coloured_by_its_language() {
+        let runs = fence_runs("rust", "let x = 1;\n").unwrap();
+        assert_eq!(runs.first().map(|run| run.mark), Some(Mark::Keyword));
+        assert!(fence_runs("no-such-language", "let x = 1;\n").is_none());
     }
 
     #[test]
