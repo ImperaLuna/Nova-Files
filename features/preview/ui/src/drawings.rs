@@ -14,11 +14,14 @@ use crate::{PreviewPart, release};
 
 const PERCENT: f32 = 100.0;
 const LIGHT_SUM: f32 = 1.5;
+const BYTE_BITS: u32 = 8;
+const BYTE_TOP: f32 = 255.0;
 const MAX_ZOOM_PERCENT: f32 = 400.0;
 
 impl PreviewPart {
     pub(crate) fn ask_pictures(&self, id: PreviewId, cx: &App) {
-        let light = light(&Colors::of(cx));
+        let colors = Colors::of(cx);
+        let (light, ink) = (light(&colors), ink(&colors));
         let Some(open) = self.looks.open.as_ref().filter(|open| open.asked == id) else {
             return;
         };
@@ -45,6 +48,7 @@ impl PreviewPart {
                 source: Arc::clone(source),
                 zoom_percent,
                 light,
+                ink,
                 fit,
             };
             self.host.link.send(figure).ok();
@@ -149,4 +153,21 @@ fn zoom_percent(scale_factor: f32) -> u16 {
 fn light(colors: &Colors) -> bool {
     let window = colors.window;
     window.r + window.g + window.b > LIGHT_SUM
+}
+
+fn ink(colors: &Colors) -> u32 {
+    let text = colors.text;
+    [text.r, text.g, text.b]
+        .into_iter()
+        .fold(0, |ink, part| (ink << BYTE_BITS) | u32::from(byte(part)))
+}
+
+fn byte(part: f32) -> u8 {
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "clamped to a byte's range first"
+    )]
+    let byte = (part * BYTE_TOP).round().clamp(0.0, BYTE_TOP) as u8;
+    byte
 }

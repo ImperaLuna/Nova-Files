@@ -9,6 +9,7 @@ use nova_files_preview_api::markdown::{Block, FigureKind};
 use crate::links::{Link, link};
 
 pub const DRAWN_PICTURES: usize = 12;
+pub const DRAWN_FORMULAS: usize = 64;
 
 pub type Drawn = Rc<HashMap<Arc<str>, Arc<RenderImage>>>;
 
@@ -44,10 +45,12 @@ impl Pictures {
         }
         let mut figures: Vec<(FigureKind, Arc<str>)> = Vec::new();
         for (kind, source) in gathered.figures {
-            if figures.len() == DRAWN_PICTURES {
-                break;
-            }
-            if !figures.iter().any(|(_, seen)| *seen == source) {
+            let cap = match kind {
+                FigureKind::Diagram => DRAWN_PICTURES,
+                FigureKind::Formula => DRAWN_FORMULAS,
+            };
+            let taken = figures.iter().filter(|(seen, _)| *seen == kind).count();
+            if taken < cap && !figures.iter().any(|(_, seen)| *seen == source) {
                 figures.push((kind, source));
             }
         }
@@ -118,10 +121,7 @@ fn gather(blocks: &[Block], gathered: &mut Gathered) {
     for block in blocks {
         match block {
             Block::Picture { target, .. } => gathered.targets.push(Arc::clone(target)),
-            Block::Figure {
-                kind: kind @ FigureKind::Diagram,
-                source,
-            } => gathered.figures.push((*kind, Arc::clone(source))),
+            Block::Figure { kind, source } => gathered.figures.push((*kind, Arc::clone(source))),
             Block::Quote(inner) | Block::Note { blocks: inner, .. } => gather(inner, gathered),
             Block::List { items, .. } => {
                 for item in items.iter() {

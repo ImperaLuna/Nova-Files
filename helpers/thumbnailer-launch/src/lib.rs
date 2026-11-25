@@ -18,7 +18,9 @@ const PER_FILE: Duration = Duration::from_secs(15);
 const PASSED_VARS: [&str; 4] = ["PATH", "HOME", "XDG_DATA_HOME", "XDG_DATA_DIRS"];
 const READER_THREAD: &str = "nova-files-thumbnail-reader";
 const PREVIEW_FLAG: &str = "--preview";
-const DIAGRAM_FLAG: &str = "--diagram";
+const FIGURE_FLAG: &str = "--figure";
+const DIAGRAM_WORD: &str = "diagram";
+const FORMULA_WORD: &str = "formula";
 const LIGHT_WORD: &str = "light";
 const DARK_WORD: &str = "dark";
 const BYTES_PER_PIXEL: u64 = 4;
@@ -139,21 +141,32 @@ pub fn picture(
     pictures_from(command, fit, running, wanted)
 }
 
-pub fn diagram(
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Figure {
+    Diagram,
+    Formula,
+}
+
+pub fn figure(
     helper: &Path,
-    (source, zoom_percent, light): (&str, u16, bool),
-    fit: Fit,
+    (figure, source): (Figure, &str),
+    (zoom_percent, (light, ink), fit): (u16, (bool, u32), Fit),
     running: &Running,
     wanted: impl Fn() -> bool,
 ) -> Option<Picture> {
     let fit = fit.clamped();
     let mut command = command(helper);
     command
-        .arg(DIAGRAM_FLAG)
+        .arg(FIGURE_FLAG)
+        .arg(match figure {
+            Figure::Diagram => DIAGRAM_WORD,
+            Figure::Formula => FORMULA_WORD,
+        })
         .arg(fit.width.to_string())
         .arg(fit.height.to_string())
         .arg(zoom_percent.to_string())
         .arg(if light { LIGHT_WORD } else { DARK_WORD })
+        .arg(format!("{ink:06X}"))
         .arg(source);
     let mut frames = pictures_from(command, fit, running, wanted)?;
     (frames.len() == 1).then(|| frames.remove(0).0)

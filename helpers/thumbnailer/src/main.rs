@@ -2,8 +2,8 @@
 
 mod batch;
 mod data_dirs;
-mod diagram;
 mod document;
+mod figure;
 mod mime;
 mod moving;
 mod png_text;
@@ -25,12 +25,12 @@ fn main() -> ExitCode {
         };
         return preview::run(&request);
     }
-    if args.next_if(|arg| arg == diagram::FLAG).is_some() {
-        let Some(request) = diagram::Request::from_args(args) else {
-            writeln!(io::stderr(), "{}", diagram::USAGE).ok();
+    if args.next_if(|arg| arg == figure::FLAG).is_some() {
+        let Some(request) = figure::Request::from_args(args) else {
+            writeln!(io::stderr(), "{}", figure::USAGE).ok();
             return ExitCode::FAILURE;
         };
-        return diagram::run(&request);
+        return figure::run(&request);
     }
     if args.next_if(|arg| arg == document::FLAG).is_some() {
         let Some(file) = document::file_from_args(args) else {

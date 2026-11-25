@@ -58,7 +58,7 @@ pub enum Command {
         fit: Fit,
     },
     /// Draw a Markdown figure from its `source`, at `zoom_percent` of its
-    /// own size and no bigger than `fit`, in light colours when `light`. The answer is [`Event::Figured`]
+    /// own size and no bigger than `fit`, in light colours when `light`, with text in `ink` (`0xRRGGBB`). The answer is [`Event::Figured`]
     /// with the same `id` and `source`, unless a newer preview replaced `id`
     /// first.
     Figure {
@@ -67,6 +67,7 @@ pub enum Command {
         source: Arc<str>,
         zoom_percent: u16,
         light: bool,
+        ink: u32,
         fit: Fit,
     },
 }
