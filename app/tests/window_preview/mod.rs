@@ -375,3 +375,25 @@ async fn a_link_to_a_note_beside_it_moves_the_quick_look_there(cx: &mut TestAppC
     wait_for_preview(&view, cx, "b.md").await;
     assert_eq!(selected(&view, cx), ["b.md"]);
 }
+
+#[gpui::test]
+async fn a_link_to_a_folder_goes_into_it(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = TempFolder::tree("preview-folder-link");
+    fs::write(tree.path().join("a.md"), "[the projects](Projects/)\n").unwrap();
+    cx.update(nova_files_window::bind_window_keys);
+    let (view, cx) = open_on(cx, tree.path()).await;
+    cx.run_until_parked();
+    let names = view.read_with(cx, |view, _| view.entry_names());
+    let a = names.iter().position(|name| name == "a.md").unwrap();
+    let selector: &'static str = format!("entry-{a}").leak();
+
+    click(cx, selector);
+    cx.simulate_keystrokes("space");
+    wait_for_preview(&view, cx, "a.md").await;
+    cx.run_until_parked();
+    let page = cx.debug_bounds("preview-markdown").unwrap();
+    counted_click(cx, page.origin + gpui::point(px(48.0), px(32.0)), 1);
+    wait_for_folder(&view, cx, &tree.path().join("Projects")).await;
+    assert!(!view.read_with(cx, previewing));
+}

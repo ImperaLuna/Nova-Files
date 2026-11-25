@@ -8,6 +8,8 @@ use gpui::{App, Context, Window};
 use nova_files_api::uri::{file_uri, path_from_file_uri};
 use nova_files_preview_api::Command;
 
+use nova_files_shell::Location;
+
 use crate::PreviewPart;
 use crate::page::Follow;
 
@@ -15,6 +17,7 @@ const ANCHOR: char = '#';
 const QUERY: char = '?';
 const SCHEME_END: char = ':';
 const FILE_SCHEME: &str = "file";
+const WEB_SCHEMES: [&str; 3] = ["http", "https", "mailto"];
 const MARKDOWN_ENDINGS: [&str; 3] = ["md", "markdown", "mdown"];
 
 #[derive(Debug, PartialEq, Eq)]
@@ -33,8 +36,14 @@ pub fn link(target: &str, folder: &Path) -> Option<Link> {
         Some(scheme) if scheme.eq_ignore_ascii_case(FILE_SCHEME) => {
             path_from_file_uri(without_tail(target)).map(Link::Local)
         }
-        Some(_) => Some(Link::Web(target.to_owned())),
-        None => local(without_tail(target), folder).map(Link::Local),
+        Some(scheme)
+            if WEB_SCHEMES
+                .iter()
+                .any(|web| scheme.eq_ignore_ascii_case(web)) =>
+        {
+            Some(Link::Web(target.to_owned()))
+        }
+        _ => local(without_tail(target), folder).map(Link::Local),
     }
 }
 
@@ -110,7 +119,7 @@ impl PreviewPart {
     }
 
     fn follow_link(&self, target: &str, cx: &mut Context<Self>) {
-        let Some(folder) = self.shown_folder(cx) else {
+        let Some((folder, listed)) = self.shown_folders(cx) else {
             return;
         };
         match link(target, &folder) {
@@ -120,15 +129,22 @@ impl PreviewPart {
                 }
             }
             Some(Link::Web(address)) => cx.open_url(&address),
-            Some(Link::Local(path)) => self.follow_path(path, &folder, cx),
+            Some(Link::Local(path)) => self.follow_path(path, folder == listed, cx),
             None => {}
         }
     }
 
-    fn follow_path(&self, path: PathBuf, folder: &Path, cx: &mut Context<Self>) {
-        let name = path.file_name().map(OsString::from);
-        let here = path.parent() == Some(folder) && is_markdown(&path);
-        if let Some(name) = name.filter(|_| here) {
+    fn follow_path(&self, path: PathBuf, listed_here: bool, cx: &mut Context<Self>) {
+        if path.is_dir() {
+            let place = Location::Folder(path);
+            self.host.nav.update(cx, |nav, cx| nav.go(place, cx));
+            return;
+        }
+        if !path.exists() {
+            return;
+        }
+        let beside = listed_here && is_markdown(&path);
+        if let Some(name) = path.file_name().map(OsString::from).filter(|_| beside) {
             self.host
                 .entries
                 .update(cx, |entries, cx| entries.select(vec![name], cx));
@@ -143,10 +159,11 @@ impl PreviewPart {
             .ok();
     }
 
-    fn shown_folder(&self, cx: &App) -> Option<PathBuf> {
+    fn shown_folders(&self, cx: &App) -> Option<(PathBuf, PathBuf)> {
         let open = self.looks.open.as_ref()?;
-        let listing = self.host.entries.read(cx).listing()?;
-        (listing.id == open.listing).then(|| listing.path.clone())
+        let path = self.entry_path(open.listing, open.entry, cx)?;
+        let listed = self.host.entries.read(cx).listing()?.path.clone();
+        Some((path.parent()?.to_path_buf(), listed))
     }
 }
 
@@ -181,6 +198,8 @@ mod tests {
         assert_eq!(read("../up/file.pdf?x"), local("/home/me/up/file.pdf"));
         assert_eq!(read("/etc/hosts"), local("/etc/hosts"));
         assert_eq!(read("file:///tmp/x.txt"), local("/tmp/x.txt"));
+        assert_eq!(read("2024:plan.md"), local("/home/me/notes/2024:plan.md"));
+        assert_eq!(read("steam://run/1"), local("/home/me/notes/steam:/run/1"));
         assert_eq!(read(""), None);
     }
 
