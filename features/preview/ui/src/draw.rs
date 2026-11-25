@@ -2,10 +2,9 @@ use std::ffi::OsStr;
 use std::sync::Arc;
 
 use gpui::{
-    Action, AnyElement, ClickEvent, Context, Div, HighlightStyle, InteractiveElement as _,
-    IntoElement, MouseButton, MouseDownEvent, ParentElement as _, Pixels, RenderImage,
-    SharedString, StatefulInteractiveElement as _, Styled as _, StyledText, div, img,
-    prelude::FluentBuilder as _, px,
+    Action, AnyElement, ClickEvent, Context, Div, InteractiveElement as _, IntoElement,
+    MouseButton, MouseDownEvent, ParentElement as _, Pixels, RenderImage, SharedString,
+    StatefulInteractiveElement as _, Styled as _, div, img, prelude::FluentBuilder as _, px,
 };
 use nova_files_api::{Entry, EntryKind, Listing};
 use nova_files_preview_api::{Preview, PreviewContent};
@@ -17,8 +16,9 @@ use nova_files_shell::theme::{Colors, preview, radius, size, text};
 use nova_files_shell::widgets::{icon, icon_button, kind_icon};
 
 use crate::PreviewPart;
-use crate::code::{self, Coded};
+use crate::code::Coded;
 use crate::looks::{QuickLook, Shown};
+use crate::page::page_art;
 use crate::pages::{Layout, Pages};
 use crate::player::{self, art_room, bar_width, media_art};
 
@@ -125,7 +125,7 @@ pub fn stage_art(
             art(
                 shown,
                 shown_entry(shown, listing, entry),
-                (room, scale_factor, scrolls),
+                (room, scale_factor, scrolls, open.source),
                 colors,
             )
         },
@@ -149,7 +149,7 @@ fn kept_open(element: impl IntoElement) -> Div {
 fn art(
     shown: &Shown,
     entry: &Entry,
-    (room, scale_factor, scrolls): (gpui::Size<Pixels>, f32, bool),
+    (room, scale_factor, scrolls, source): (gpui::Size<Pixels>, f32, bool, bool),
     colors: &Colors,
 ) -> AnyElement {
     let Some(preview) = shown.preview.as_deref() else {
@@ -161,6 +161,12 @@ fn art(
             picture_art(picture, room, scale_factor, colors).into_any_element()
         }
         (PreviewContent::Text { text, .. }, _) => text_art(text, room, colors).into_any_element(),
+        (PreviewContent::Markdown { .. }, _) if !source && shown.page.is_some() => {
+            shown.page.as_ref().zip(shown.code.as_deref()).map_or_else(
+                || big_icon(name, kind, colors),
+                |(page, coded)| page_art(page, coded.family.clone(), room, colors),
+            )
+        }
         (PreviewContent::Code { text, .. } | PreviewContent::Markdown { text, .. }, _) => {
             shown.code.as_deref().map_or_else(
                 || text_art(text, room, colors).into_any_element(),
@@ -340,13 +346,6 @@ fn code_art(coded: &Coded, room: gpui::Size<Pixels>, colors: &Colors) -> impl In
                 .take(lines)
                 .enumerate()
                 .map(|(index, line)| {
-                    let highlights = line.marks.iter().map(|(range, mark)| {
-                        let style = HighlightStyle {
-                            color: Some(code::color(*mark, &colors.code).into()),
-                            ..HighlightStyle::default()
-                        };
-                        (range.clone(), style)
-                    });
                     div()
                         .flex()
                         .gap(CODE_GUTTER_GAP)
@@ -358,11 +357,7 @@ fn code_art(coded: &Coded, room: gpui::Size<Pixels>, colors: &Colors) -> impl In
                                 .text_color(colors.code.line_number)
                                 .child(SharedString::from((index + 1).to_string())),
                         )
-                        .child(
-                            div().min_w_0().truncate().child(
-                                StyledText::new(line.text.clone()).with_highlights(highlights),
-                            ),
-                        )
+                        .child(div().min_w_0().truncate().child(line.styled(&colors.code)))
                 }),
         )
 }

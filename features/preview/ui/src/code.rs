@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use gpui::{App, Global, Rgba, SharedString};
+use gpui::{App, Global, HighlightStyle, Rgba, SharedString, StyledText};
 use nova_files_preview_api::{Mark, Run};
 use nova_files_shell::theme::{Code, text};
 
@@ -67,6 +67,19 @@ fn pieces(runs: &[Run]) -> impl Iterator<Item = (Range<usize>, Mark)> + '_ {
         *at += usize::try_from(run.bytes).unwrap_or(0);
         Some((start..*at, run.mark))
     })
+}
+
+impl Line {
+    pub fn styled(&self, code: &Code) -> StyledText {
+        let highlights = self.marks.iter().map(|(range, mark)| {
+            let style = HighlightStyle {
+                color: Some(color(*mark, code).into()),
+                ..HighlightStyle::default()
+            };
+            (range.clone(), style)
+        });
+        StyledText::new(self.text.clone()).with_highlights(highlights)
+    }
 }
 
 pub const fn color(mark: Mark, code: &Code) -> Rgba {

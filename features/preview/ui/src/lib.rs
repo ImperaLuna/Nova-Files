@@ -3,6 +3,7 @@
 mod code;
 mod draw;
 mod looks;
+mod page;
 mod pages;
 mod player;
 mod playing;
@@ -28,6 +29,7 @@ pub use looks::Previewed;
 use looks::{
     DEFAULT_FIT, QuickLook, QuickLooks, Shown, moved, render_image, render_moving, without_pixels,
 };
+use page::Page;
 use pages::{Layout, Pages, Scroll};
 use player::{Media, State};
 
@@ -266,12 +268,38 @@ impl PreviewPart {
         let Some((room, _)) = self.looks.room else {
             return false;
         };
-        let Some(pages) = self.shown_pages() else {
+        if let Some(page) = self.shown_page() {
+            page.scroll(to, room);
+        } else if let Some(pages) = self.shown_pages() {
+            pages.scroll(to, room);
+        } else {
             return false;
-        };
-        pages.scroll(to, room);
+        }
         cx.notify();
         true
+    }
+
+    fn flip_source(&mut self) -> bool {
+        let Some(open) = self.looks.open.as_mut() else {
+            return false;
+        };
+        let markdown = open.current().is_some_and(|shown| {
+            shown
+                .preview
+                .as_deref()
+                .is_some_and(|preview| matches!(preview.content, PreviewContent::Markdown { .. }))
+        });
+        if markdown {
+            self.looks.source = !self.looks.source;
+            open.source = self.looks.source;
+        }
+        markdown
+    }
+
+    fn shown_page(&self) -> Option<&Page> {
+        let open = self.looks.open.as_ref()?;
+        let shown = open.current().filter(|_| !open.source)?;
+        shown.page.as_ref()
     }
 
     fn shown_pages(&mut self) -> Option<&mut Pages> {
@@ -471,6 +499,7 @@ impl PreviewPart {
             entry,
             asked,
             shown,
+            source: self.looks.source,
         });
         let fit = self.looks.fit.unwrap_or(DEFAULT_FIT);
         self.host
@@ -571,6 +600,17 @@ impl PreviewPart {
             release(carried.into_iter().flat_map(Pages::images), cx);
             None
         };
+        let carried_page = open
+            .shown
+            .as_mut()
+            .filter(|shown| shown.entry == entry)
+            .and_then(|shown| shown.page.take());
+        let page = match preview.as_deref().map(|preview| &preview.content) {
+            Some(PreviewContent::Markdown { blocks, .. }) => {
+                Some(Page::new(Arc::clone(blocks)).carrying(carried_page))
+            }
+            _ => None,
+        };
         let media = match preview.as_deref().map(|preview| &preview.content) {
             Some(PreviewContent::Media { video }) => Some(Media::new(id, *video)),
             _ => None,
@@ -581,6 +621,7 @@ impl PreviewPart {
             picture,
             code,
             pages,
+            page,
             media,
         };
         let before = open.shown.replace(shown);

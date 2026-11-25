@@ -8,6 +8,7 @@ use nova_files_preview_api::{
 };
 
 use crate::code::Coded;
+use crate::page::Page;
 use crate::pages::Pages;
 use crate::player::Media;
 
@@ -28,6 +29,7 @@ pub struct QuickLooks {
     pub room: Option<(Size<Pixels>, f32)>,
     pub docked: bool,
     pub volume: u8,
+    pub source: bool,
     next_id: u64,
 }
 
@@ -39,6 +41,7 @@ impl Default for QuickLooks {
             room: None,
             docked: false,
             volume: MAX_VOLUME,
+            source: false,
             next_id: 0,
         }
     }
@@ -56,6 +59,7 @@ pub struct QuickLook {
     pub entry: EntryId,
     pub asked: PreviewId,
     pub shown: Option<Shown>,
+    pub source: bool,
 }
 
 impl QuickLook {
@@ -72,6 +76,7 @@ pub struct Shown {
     pub picture: Option<Arc<RenderImage>>,
     pub code: Option<Arc<Coded>>,
     pub pages: Option<Pages>,
+    pub page: Option<Page>,
     pub media: Option<Media>,
 }
 
@@ -182,6 +187,7 @@ mod tests {
             picture: None,
             code: None,
             pages: None,
+            page: None,
             media: None,
         };
         let moved_entry = |entry, from, to| moved(shown(entry), EntryId(from), EntryId(to)).entry;

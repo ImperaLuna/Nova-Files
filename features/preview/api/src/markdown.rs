@@ -51,7 +51,7 @@ pub enum Block {
         kind: FigureKind,
         source: Arc<str>,
     },
-    /// A footnote's text, named by the `label` its references use.
+    /// A footnote's text, with the number its references show as `label`.
     Note {
         label: Arc<str>,
         blocks: Arc<[Self]>,
@@ -114,7 +114,7 @@ impl Look {
     pub const CODE: Self = Self(1 << 3);
     /// A `$…$` formula inside a line, holding its source.
     pub const FORMULA: Self = Self(1 << 4);
-    /// A reference to a [`Block::Note`], holding its label.
+    /// A reference to a [`Block::Note`], holding its number in brackets.
     pub const NOTE: Self = Self(1 << 5);
 
     /// This look with `other`'s added.

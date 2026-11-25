@@ -12,6 +12,7 @@ use crate::{PreviewPart, release};
 const PAUSE_KEY: &str = "k";
 const BACK_KEY: &str = "j";
 const FORWARD_KEY: &str = "l";
+const SOURCE_KEY: &str = "r";
 
 impl PreviewPart {
     pub(crate) fn shown_media(&mut self) -> Option<&mut Media> {
@@ -97,7 +98,14 @@ impl PreviewPart {
     ) -> bool {
         let held = event.keystroke.modifiers;
         let plain = !(held.control || held.alt || held.platform || held.function || held.shift);
-        if !self.previewing() || !plain || self.shown_media().is_none() {
+        if !self.previewing() || !plain {
+            return false;
+        }
+        if event.keystroke.key == SOURCE_KEY && self.flip_source() {
+            cx.notify();
+            return true;
+        }
+        if self.shown_media().is_none() {
             return false;
         }
         match event.keystroke.key.as_str() {

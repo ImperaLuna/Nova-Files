@@ -195,12 +195,19 @@ fn tables_keep_columns_and_rows() {
 
 #[test]
 fn footnotes_are_referenced_and_kept() {
-    let blocks = blocks("Said[^1].\n\n[^1]: Where.\n");
-    let [Block::Paragraph(text), Block::Note { label, blocks }] = blocks.as_slice() else {
+    let blocks = blocks("Said[^why] and[^how].\n\n[^how]: Thus.\n\n[^why]: Where.\n");
+    let [
+        Block::Paragraph(text),
+        Block::Note { label, blocks },
+        Block::Note { label: second, .. },
+    ] = blocks.as_slice()
+    else {
         panic!("{blocks:?}");
     };
-    assert!(looks(text).contains(&("1".to_owned(), Look::NOTE)));
-    assert_eq!(&**label, "1");
+    assert!(looks(text).contains(&("[1]".to_owned(), Look::NOTE)));
+    assert!(looks(text).contains(&("[2]".to_owned(), Look::NOTE)));
+    assert_eq!(&**label, "2");
+    assert_eq!(&**second, "1");
     assert!(matches!(&**blocks, [Block::Paragraph(_)]));
 }
 
