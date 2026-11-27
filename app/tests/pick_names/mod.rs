@@ -1,4 +1,5 @@
 use super::*;
+use common::counted_click;
 
 fn look_alike_tree() -> TempFolder {
     let tree = picker_tree();
@@ -160,15 +161,28 @@ async fn a_space_typed_into_the_name_stays_in_it(cx: &mut TestAppContext) {
     );
 }
 
+async fn double_click_into_an_empty_folder(
+    view: &Entity<MainWindow>,
+    cx: &mut VisualTestContext,
+    folder: &Path,
+) {
+    cx.run_until_parked();
+    let position = cx.debug_bounds("entry-0").unwrap().center();
+    counted_click(cx, position, 1);
+    wait_for_folder(view, cx, folder).await;
+    counted_click(cx, position, 2);
+    cx.run_until_parked();
+}
+
 #[gpui::test]
 async fn a_suggested_name_stays_in_the_box_in_another_folder(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = picker_tree();
     let projects = tree.path().join("Projects");
+    let nova = projects.join("nova");
     let suggested = OsString::from_vec(b"caf\xe9.txt".to_vec());
-    let (view, cx, answers) = picker(cx, &tree, tree.path(), save(suggested.clone())).await;
-    click(cx, "entry-0");
-    wait_for_folder(&view, cx, &projects).await;
+    let (view, cx, answers) = picker(cx, &tree, &projects, save(suggested.clone())).await;
+    double_click_into_an_empty_folder(&view, cx, &nova).await;
     assert_eq!(
         name(&view, cx),
         Some(suggested.to_string_lossy().into_owned())
@@ -176,7 +190,7 @@ async fn a_suggested_name_stays_in_the_box_in_another_folder(cx: &mut TestAppCon
     cx.simulate_keystrokes("enter");
     assert_eq!(
         answer(&view, cx, &answers).await,
-        Some(picked(projects.join(suggested)))
+        Some(picked(nova.join(suggested)))
     );
 }
 
@@ -184,16 +198,15 @@ async fn a_suggested_name_stays_in_the_box_in_another_folder(cx: &mut TestAppCon
 async fn a_typed_name_stays_in_the_box_in_another_folder(cx: &mut TestAppContext) {
     let _watchdog = Watchdog::start();
     let tree = picker_tree();
-    cx.update(nova_files_window::bind_window_keys);
     let projects = tree.path().join("Projects");
+    let nova = projects.join("nova");
     let (view, cx, answers) = picker(cx, &tree, &projects, save("a.txt")).await;
     cx.simulate_input("plan");
-    cx.simulate_keystrokes("alt-up");
-    wait_for_folder(&view, cx, tree.path()).await;
+    double_click_into_an_empty_folder(&view, cx, &nova).await;
     assert_eq!(name(&view, cx).as_deref(), Some("plan.txt"));
     click(cx, "pick-accept");
     assert_eq!(
         answer(&view, cx, &answers).await,
-        Some(picked(tree.path().join("plan.txt")))
+        Some(picked(nova.join("plan.txt")))
     );
 }
