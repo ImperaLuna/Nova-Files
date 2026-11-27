@@ -257,11 +257,18 @@ impl PickerPart {
         if files.is_empty() && !ids.is_empty() {
             return;
         }
-        let names: Vec<String> = files.iter().map(|(_, name)| name.clone()).collect();
-        let text = names_text(&names);
-        pick.name.update(cx, |field, cx| field.set_text(&text, cx));
-        pick.copied =
-            (!files.is_empty()).then(|| (files.into_iter().map(|(id, _)| id).collect(), text));
+        let keeps_name = files.is_empty() && {
+            let text = pick.name.read(cx).text();
+            let copied = pick.copied.take().filter(|(_, copied)| copied == text);
+            copied.is_none() || pick.mode == Mode::Save
+        };
+        if !keeps_name {
+            let names: Vec<String> = files.iter().map(|(_, name)| name.clone()).collect();
+            let text = names_text(&names);
+            pick.name.update(cx, |field, cx| field.set_text(&text, cx));
+            pick.copied =
+                (!files.is_empty()).then(|| (files.into_iter().map(|(id, _)| id).collect(), text));
+        }
         pick.conflict = None;
         pick.recheck = None;
         pick.jump = None;
