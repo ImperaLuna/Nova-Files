@@ -44,6 +44,12 @@ impl MainWindow {
                 .child(places)
                 .child(drives);
         }
+        let drives = drives.flex_col();
+        let (scrolled, kept) = if self.picker() {
+            (Some(drives), None)
+        } else {
+            (None, Some(drives.max_h(size::DRIVES_MAX_HEIGHT)))
+        };
         sidebar
             .flex_col()
             .flex_1()
@@ -53,6 +59,7 @@ impl MainWindow {
             .child(
                 div()
                     .id("sidebar-scroll")
+                    .debug_selector(|| "sidebar-scroll".to_owned())
                     .flex()
                     .flex_col()
                     .flex_1()
@@ -61,9 +68,10 @@ impl MainWindow {
                     .pb(size::GAP)
                     .overflow_y_scroll()
                     .child(places)
-                    .when(!narrow, |scroll| scroll.child(self.tree_section(cx))),
+                    .when(!narrow, |scroll| scroll.child(self.tree_section(cx)))
+                    .children(scrolled),
             )
-            .child(drives.flex_col().max_h(size::DRIVES_MAX_HEIGHT))
+            .children(kept)
     }
 }
 
