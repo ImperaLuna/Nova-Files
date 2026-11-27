@@ -355,9 +355,6 @@ fn crumbs(page: GatheredPage) -> Vec<Crumb> {
 }
 
 fn rows(_: &GatheredPart, scene: &Scene, _: &App) -> Vec<SidebarRow> {
-    if scene.picker {
-        return Vec::new();
-    }
     Gathering::ALL
         .into_iter()
         .map(|place| {

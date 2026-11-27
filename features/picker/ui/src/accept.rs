@@ -21,8 +21,12 @@ impl PickerPart {
             cx.notify();
             return;
         }
-        let folder = self.folder(cx);
         let text = pick.name.read(cx).text().to_owned();
+        let Some(folder) = self.folder_of(cx) else {
+            self.accept_on_page(&text, cx);
+            cx.notify();
+            return;
+        };
         let clicked = pick
             .copied
             .as_ref()
@@ -57,6 +61,45 @@ impl PickerPart {
             Typed::Name(name) => self.accept_name(&folder, &name, cx),
         }
         cx.notify();
+    }
+
+    fn accept_on_page(&mut self, text: &str, cx: &mut Context<Self>) {
+        let home = self.host.home.clone();
+        match typed::read(text, &home, &home) {
+            Typed::Folder(path) => return self.jump(&path, false, cx),
+            Typed::Path(path) => return self.jump(&path, true, cx),
+            Typed::Nothing | Typed::Name(_) => {}
+        }
+        let Some(mode) = self.pick.as_ref().map(|pick| pick.mode) else {
+            return;
+        };
+        let selected: Vec<(EntryKind, PathBuf)> = {
+            let entries = self.host.entries.read(cx);
+            let Some(listing) = entries.listing() else {
+                return;
+            };
+            entries
+                .selected()
+                .iter()
+                .map(|entry| (entry.kind, listing.path_of(entry)))
+                .collect()
+        };
+        let wanted = match mode {
+            Mode::Files => EntryKind::File,
+            Mode::Folders | Mode::Save => EntryKind::Folder,
+        };
+        let paths: Vec<PathBuf> = selected
+            .iter()
+            .filter(|(kind, _)| *kind == wanted)
+            .map(|(_, path)| path.clone())
+            .collect();
+        match (mode, &selected[..]) {
+            (Mode::Files | Mode::Folders, _) if !paths.is_empty() => {
+                self.answer_all(paths, cx);
+            }
+            (Mode::Files | Mode::Save, [(EntryKind::Folder, path)]) => self.go(path.clone(), cx),
+            _ => {}
+        }
     }
 
     fn shown_entries(&self, ids: &[EntryId], cx: &Context<Self>) -> Vec<Found> {

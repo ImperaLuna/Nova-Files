@@ -9,6 +9,7 @@ mod pick_filter;
 mod pick_keys;
 mod pick_names;
 mod pick_several;
+mod pick_sidebar;
 mod pick_state;
 
 use std::ffi::OsString;

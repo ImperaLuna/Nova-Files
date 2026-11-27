@@ -15,6 +15,9 @@ pub fn chip(
     _: &mut Window,
     cx: &mut Context<GatheredPart>,
 ) -> Option<AnyElement> {
+    if scene.picker {
+        return None;
+    }
     let place = scene.on_page::<GatheredPage>()?.place;
     let colors = Colors::of(cx);
     let chip = div()

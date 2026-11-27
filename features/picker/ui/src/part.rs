@@ -224,10 +224,6 @@ impl PickerPart {
             .map(Path::to_path_buf)
     }
 
-    pub(crate) fn folder(&self, cx: &App) -> PathBuf {
-        self.folder_of(cx).unwrap_or_else(|| self.host.home.clone())
-    }
-
     pub(crate) fn go(&self, path: PathBuf, cx: &mut Context<Self>) {
         self.host
             .nav
