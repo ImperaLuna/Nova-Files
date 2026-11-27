@@ -159,3 +159,41 @@ async fn a_space_typed_into_the_name_stays_in_it(cx: &mut TestAppContext) {
         Some(picked(tree.path().join("a b.txt")))
     );
 }
+
+#[gpui::test]
+async fn a_suggested_name_stays_in_the_box_in_another_folder(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    let projects = tree.path().join("Projects");
+    let suggested = OsString::from_vec(b"caf\xe9.txt".to_vec());
+    let (view, cx, answers) = picker(cx, &tree, tree.path(), save(suggested.clone())).await;
+    click(cx, "entry-0");
+    wait_for_folder(&view, cx, &projects).await;
+    assert_eq!(
+        name(&view, cx),
+        Some(suggested.to_string_lossy().into_owned())
+    );
+    cx.simulate_keystrokes("enter");
+    assert_eq!(
+        answer(&view, cx, &answers).await,
+        Some(picked(projects.join(suggested)))
+    );
+}
+
+#[gpui::test]
+async fn a_typed_name_stays_in_the_box_in_another_folder(cx: &mut TestAppContext) {
+    let _watchdog = Watchdog::start();
+    let tree = picker_tree();
+    cx.update(nova_files_window::bind_window_keys);
+    let projects = tree.path().join("Projects");
+    let (view, cx, answers) = picker(cx, &tree, &projects, save("a.txt")).await;
+    cx.simulate_input("plan");
+    cx.simulate_keystrokes("alt-up");
+    wait_for_folder(&view, cx, tree.path()).await;
+    assert_eq!(name(&view, cx).as_deref(), Some("plan.txt"));
+    click(cx, "pick-accept");
+    assert_eq!(
+        answer(&view, cx, &answers).await,
+        Some(picked(tree.path().join("plan.txt")))
+    );
+}

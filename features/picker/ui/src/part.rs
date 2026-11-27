@@ -257,6 +257,13 @@ impl PickerPart {
         if files.is_empty() && !ids.is_empty() {
             return;
         }
+        if files.is_empty() {
+            let text = pick.name.read(cx).text();
+            let copied = pick.copied.take().filter(|(_, copied)| copied == text);
+            if copied.is_none() || pick.mode == Mode::Save {
+                return;
+            }
+        }
         let names: Vec<String> = files.iter().map(|(_, name)| name.clone()).collect();
         let text = names_text(&names);
         pick.name.update(cx, |field, cx| field.set_text(&text, cx));
